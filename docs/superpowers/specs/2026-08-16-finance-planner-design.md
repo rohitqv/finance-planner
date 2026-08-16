@@ -177,11 +177,38 @@ Build a month-by-month cash flow over `Z*12` months:
   Retirement→Calculator handoff hands the user off to. Confirmed with the
   user rather than expanding this table to duplicate that view.
 
+### Required vs. surplus accumulation view (added 2026-08-16)
+
+When the user's current monthly investment exceeds the required monthly SIP,
+they have a surplus worth visualizing. A new accumulation-phase chart + table
+sits between the result cards and the existing depletion table, showing two
+series from current age to retirement age:
+
+- **Required** — `accumulate({lumpsum: currentCorpus, monthlySip:
+  requiredMonthlySip, annualReturn: preReturnPct, years: accumYears})`'s yearly
+  series. By construction (this is exactly how `requiredMonthlySip` is solved),
+  this lands precisely on `corpusNeededAtRetirement` in the final year.
+- **Surplus** — only shown when `currentMonthlyInvestment > requiredMonthlySip`.
+  `accumulate({lumpsum: 0, monthlySip: currentMonthlyInvestment -
+  requiredMonthlySip, annualReturn: preReturnPct, years: accumYears})`'s yearly
+  series — the extra money growing on its own as bonus wealth beyond the goal.
+- In the shortfall case (current investment ≤ required SIP), only the Required
+  series/table is shown — the existing Gap/Extra-SIP cards already cover the
+  shortfall.
+- Guarded the same way as the Calculator handoff: omitted when
+  `requiredMonthlySip` isn't finite or `retirementAge <= currentAge`.
+
+This is a visualization split of existing numbers (current corpus, required
+SIP, current monthly investment) — it introduces no new inputs and doesn't
+change `computeRetirement`'s existing result fields.
+
 ### Correctness anchors (unit tests)
 
 - A corpus equal to "Corpus Needed at Retirement," drawn down per the expense
   schedule at the post-retirement return, lands at ~0 (within tolerance) at
   lifespan.
+- The Required series' final-year value equals `corpusNeededAtRetirement`
+  (within floating-point tolerance).
 - With `current corpus = 0`, the required-SIP solution fed back through the
   accumulation engine reproduces Corpus Needed at retirement.
 - Zero inflation reduces expenses to a flat stream; corpus needed matches the
