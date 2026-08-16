@@ -18,7 +18,14 @@ export default function Page() {
       ) : (
         <RetirementTab
           onHandoff={(p) => {
-            setHandoff({ lumpsum: p.lumpsum, monthlySip: p.monthlySip, years: p.years, corpusGoal: p.corpusGoal });
+            setHandoff({
+              lumpsum: p.lumpsum,
+              monthlySip: p.monthlySip,
+              years: p.years,
+              corpusGoal: p.corpusGoal,
+              annualReturn: p.annualReturn,
+              inflationPct: p.inflationPct,
+            });
             setActive(0);
           }}
         />

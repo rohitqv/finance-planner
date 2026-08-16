@@ -15,7 +15,14 @@ function formatMoneyOrInfinite(value: number): string {
 export default function RetirementAgeCompare({
   base, ages,
 }: { base: RetirementInput; ages: number[] }) {
-  const cols = ages.map((age) => ({ age, result: computeRetirement({ ...base, retirementAge: age }) }));
+  const cols = ages.map((age) => ({
+    age,
+    // A lifespan at or before this candidate retirement age produces an
+    // empty drawdown loop and a silent ₹0 corpus/SIP (see Finding 5 in
+    // lib/finance/retirement.ts) — flag it instead of showing a confident 0.
+    invalid: base.lifespanAge <= age,
+    result: computeRetirement({ ...base, retirementAge: age }),
+  }));
   const rows: { label: string; get: (r: ReturnType<typeof computeRetirement>) => string }[] = [
     { label: "Corpus needed (at retirement)", get: (r) => formatINR(r.corpusNeededAtRetirement) },
     { label: "Required monthly SIP", get: (r) => formatMoneyOrInfinite(r.requiredMonthlySip) },
@@ -33,7 +40,11 @@ export default function RetirementAgeCompare({
         {rows.map((row) => (
           <tr key={row.label} className="border-t">
             <td className="py-1 text-gray-600">{row.label}</td>
-            {cols.map((c) => <td key={c.age}>{row.get(c.result)}</td>)}
+            {cols.map((c) => (
+              <td key={c.age} title={c.invalid ? "Lifespan must be greater than retirement age" : undefined}>
+                {c.invalid ? "—" : row.get(c.result)}
+              </td>
+            ))}
           </tr>
         ))}
       </tbody>

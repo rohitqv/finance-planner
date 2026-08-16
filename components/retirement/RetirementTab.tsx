@@ -15,14 +15,37 @@ const DEFAULT: RetirementInput = {
   phases: [], currentCorpus: 0, currentMonthlyInvestment: 0,
 };
 
+export type RetirementHandoff = {
+  monthlySip: number;
+  lumpsum: number;
+  years: number;
+  corpusGoal: number;
+  annualReturn: number;
+  inflationPct: number;
+};
+
 export default function RetirementTab({
   onHandoff,
-}: { onHandoff?: (p: { monthlySip: number; lumpsum: number; years: number; corpusGoal: number }) => void }) {
-  const [input, setInput] = useState<RetirementInput>(DEFAULT);
-  useEffect(() => { const p = loadPlan(); if (p) setInput(p); }, []);
+}: { onHandoff?: (p: RetirementHandoff) => void }) {
+  // Lazy initializer avoids a mount-time setState-in-effect (and the load/save
+  // race that came with it): the saved plan (if any) is read synchronously
+  // while computing the initial state, so there's no render where `input`
+  // holds DEFAULT before the loaded value lands.
+  const [input, setInput] = useState<RetirementInput>(() => loadPlan() ?? DEFAULT);
   useEffect(() => { savePlan(input); }, [input]);
 
   const result = useMemo(() => computeRetirement(input), [input]);
+
+  // Guard the handoff at the source: requiredMonthlySip can be an
+  // intentional Infinity (see lib/finance/retirement.ts) when there's no
+  // time left to accumulate via SIP, and corpusNeededAtRetirement/SIP both
+  // collapse to a silent 0 when lifespanAge <= retirementAge (Finding 5).
+  // Neither should ever reach the Calculator tab.
+  const invalidLifespan = input.lifespanAge <= input.retirementAge;
+  const canHandoff =
+    input.retirementAge > input.currentAge &&
+    !invalidLifespan &&
+    Number.isFinite(result.requiredMonthlySip);
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -31,17 +54,26 @@ export default function RetirementTab({
         <PhaseEditor phases={input.phases} onChange={(phases) => setInput({ ...input, phases })} />
       </div>
       <div className="space-y-4">
-        <RetirementResults result={result} />
+        <RetirementResults result={result} invalidLifespan={invalidLifespan} />
         <button
-          className="rounded bg-blue-600 px-4 py-2 text-white"
-          onClick={() =>
+          className="rounded bg-blue-600 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!canHandoff}
+          title={
+            canHandoff
+              ? undefined
+              : "Set a retirement age greater than current age and a lifespan greater than retirement age first."
+          }
+          onClick={() => {
+            if (!canHandoff) return;
             onHandoff?.({
               monthlySip: Math.round(result.requiredMonthlySip),
               lumpsum: input.currentCorpus,
               years: input.retirementAge - input.currentAge,
               corpusGoal: Math.round(result.corpusNeededAtRetirement),
-            })
-          }
+              annualReturn: input.preReturnPct,
+              inflationPct: input.inflationPct,
+            });
+          }}
         >
           Plan this in Calculator
         </button>

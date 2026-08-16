@@ -11,7 +11,18 @@ function formatMoneyOrInfinite(value: number): string {
   return Number.isFinite(value) ? formatINR(value) : "Not achievable in 0 years";
 }
 
-export default function RetirementResults({ result }: { result: RetirementResult }) {
+export default function RetirementResults({
+  result, invalidLifespan,
+}: { result: RetirementResult; invalidLifespan?: boolean }) {
+  if (invalidLifespan) {
+    return (
+      <div className="rounded border border-red-400 bg-red-50 p-3 text-sm text-red-700">
+        Lifespan must be greater than retirement age. The ₹0 corpus and SIP
+        figures a plan like this would otherwise show are not real results —
+        adjust the ages to see the actual numbers.
+      </div>
+    );
+  }
   const cards = [
     { label: "Corpus needed (at retirement)", value: formatINR(result.corpusNeededAtRetirement) },
     { label: "Corpus target (today's value)", value: formatINR(result.corpusNeededToday) },
