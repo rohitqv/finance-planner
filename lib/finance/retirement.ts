@@ -43,6 +43,13 @@ export function requiredSip(
   }).futureValue;
   const remaining = target - grownCorpus;
   if (remaining <= 0) return 0;
+  // With zero (or negative) years there is no time for any monthly SIP to
+  // accumulate anything (fvPerUnit below would be 0), so a positive
+  // remaining gap can never be closed by a SIP, however large. Return
+  // Infinity explicitly here rather than falling through to `remaining / 0`,
+  // so this is an intentional "unreachable via SIP" signal, not an
+  // accidental division-by-zero artifact.
+  if (years <= 0) return Infinity;
   // FV of 1 unit monthly SIP over the horizon (linear in SIP), then scale.
   const fvPerUnit = accumulate({
     lumpsum: 0, monthlySip: 1, stepUpPct: 0,

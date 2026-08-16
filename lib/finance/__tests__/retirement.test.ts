@@ -23,6 +23,21 @@ describe("requiredSip", () => {
     const some = requiredSip(10_000_000, 25, 12, 1_000_000);
     expect(some).toBeLessThan(none);
   });
+
+  it("with zero years and an unmet target, is explicitly Infinity (unreachable via SIP), never NaN", () => {
+    // years=0 means there is no time for any monthly SIP to accumulate,
+    // so no finite SIP amount can close a positive gap. This must be an
+    // intentional, guarded Infinity — not an accidental 0/0 -> NaN or an
+    // unannotated division artifact.
+    const sip = requiredSip(10_000_000, 0, 12, 0);
+    expect(sip).toBe(Infinity);
+    expect(Number.isNaN(sip)).toBe(false);
+  });
+
+  it("with zero years and a corpus that already meets the target, returns 0 (not masked by the Infinity path)", () => {
+    const sip = requiredSip(10_000_000, 0, 12, 10_000_000);
+    expect(sip).toBe(0);
+  });
 });
 
 describe("computeRetirement — corpus depletion round-trip", () => {
@@ -50,6 +65,23 @@ describe("computeRetirement — corpus depletion round-trip", () => {
     const r = computeRetirement({ ...base, currentMonthlyInvestment: 5_000 });
     expect(r.gap).toBeGreaterThan(0);
     expect(r.extraSipToCloseGap).toBeGreaterThan(0);
+  });
+});
+
+describe("computeRetirement — zero accumulation years", () => {
+  it("currentAge === retirementAge yields no NaN and an explicit Infinity requiredMonthlySip when underfunded", () => {
+    const r = computeRetirement({ ...base, currentAge: 55, retirementAge: 55, currentCorpus: 0 });
+    expect(Number.isNaN(r.requiredMonthlySip)).toBe(false);
+    expect(Number.isNaN(r.extraSipToCloseGap)).toBe(false);
+    // Zero years to accumulate and an unmet target: no SIP amount, however
+    // large, can close the gap in zero time.
+    expect(r.requiredMonthlySip).toBe(Infinity);
+  });
+
+  it("currentAge === retirementAge with a corpus already covering the target yields 0, not Infinity", () => {
+    const r = computeRetirement({ ...base, currentAge: 55, retirementAge: 55, currentCorpus: 1_000_000_000 });
+    expect(Number.isNaN(r.requiredMonthlySip)).toBe(false);
+    expect(r.requiredMonthlySip).toBe(0);
   });
 });
 
