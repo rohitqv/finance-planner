@@ -5,6 +5,7 @@ import PhaseEditor from "./PhaseEditor";
 import RetirementResults from "./RetirementResults";
 import DrawdownTable from "./DrawdownTable";
 import DrawdownChart from "./DrawdownChart";
+import RetirementAgeCompare from "./RetirementAgeCompare";
 import { computeRetirement, type RetirementInput } from "@/lib/finance/retirement";
 import { loadPlan, savePlan } from "@/store/retirementPlan";
 
@@ -49,6 +50,10 @@ export default function RetirementTab({
       <div className="md:col-span-2">
         <h3 className="mb-2 font-semibold">Year-by-year drawdown</h3>
         <DrawdownTable rows={result.drawdown} />
+        <div className="mt-6">
+          <h3 className="mb-2 font-semibold">Compare retirement ages</h3>
+          <RetirementAgeCompare base={input} ages={[input.retirementAge - 5, input.retirementAge, input.retirementAge + 5]} />
+        </div>
       </div>
     </div>
   );

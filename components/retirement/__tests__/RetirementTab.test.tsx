@@ -7,8 +7,8 @@ beforeEach(() => localStorage.clear());
 describe("RetirementTab", () => {
   it("shows the corpus needed and a required SIP", () => {
     render(<RetirementTab />);
-    expect(screen.getByText(/corpus needed/i)).toBeInTheDocument();
-    expect(screen.getByText(/required monthly sip/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/corpus needed/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/required monthly sip/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/₹/).length).toBeGreaterThan(0);
   });
 
