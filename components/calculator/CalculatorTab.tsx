@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import InputPanel from "./InputPanel";
 import ResultCards from "./ResultCards";
 import GrowthChart from "./GrowthChart";
@@ -7,7 +7,7 @@ import ScenarioTable from "./ScenarioTable";
 import { calculate, calculateSeries } from "@/lib/finance/calculate";
 import type { CalculatorInput } from "@/lib/finance/types";
 import {
-  addScenario, deleteScenario, duplicateScenario, loadScenarios, type Scenario,
+  addScenario, deleteScenario, duplicateScenario, loadScenarios, updateScenario, type Scenario,
 } from "@/store/scenarios";
 
 const DEFAULT: CalculatorInput = {
@@ -15,14 +15,36 @@ const DEFAULT: CalculatorInput = {
   annualReturn: 12, years: 15, inflationPct: 6,
 };
 
+// `initial` crosses an external prop boundary (it's the retirement-handoff
+// payload, ultimately built from `Number(...)` on user-editable form fields
+// upstream). Only accept finite numbers for each CalculatorInput field;
+// anything else (Infinity, NaN, missing) falls back to DEFAULT rather than
+// leaking into a <input type="number"> value or downstream FV/CAGR math.
+function sanitizeInitial(initial?: Partial<CalculatorInput>): Partial<CalculatorInput> {
+  const out: Partial<CalculatorInput> = {};
+  if (!initial) return out;
+  for (const key of Object.keys(DEFAULT) as (keyof CalculatorInput)[]) {
+    const v = initial[key];
+    if (typeof v === "number" && Number.isFinite(v)) {
+      out[key] = v;
+    }
+  }
+  return out;
+}
+
 export default function CalculatorTab({ initial }: { initial?: Partial<CalculatorInput> & { corpusGoal?: number } } = {}) {
-  const [input, setInput] = useState<CalculatorInput>({ ...DEFAULT, ...initial });
+  // Lazy initializers read the handoff prop / localStorage synchronously
+  // while computing the first render's state, instead of via a mount-time
+  // `useEffect(() => setState(...), [])`. `initial` only ever changes when
+  // this whole component remounts (app/page.tsx renders CalculatorTab or
+  // RetirementTab, never both, so switching tabs is a full unmount/mount),
+  // so a prop-sync effect isn't needed to react to a changing `initial`
+  // after mount.
+  const [input, setInput] = useState<CalculatorInput>(() => ({ ...DEFAULT, ...sanitizeInitial(initial) }));
   const [name, setName] = useState("");
   const [goal, setGoal] = useState<number | undefined>(initial?.corpusGoal);
-  const [scenarios, setScenarios] = useState<Scenario[]>([]);
-
-  useEffect(() => setScenarios(loadScenarios()), []);
-  useEffect(() => { if (initial) setInput({ ...DEFAULT, ...initial }); setGoal(initial?.corpusGoal); }, [initial]);
+  const [scenarios, setScenarios] = useState<Scenario[]>(loadScenarios);
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
 
   const result = useMemo(() => calculate(input), [input]);
   const series = useMemo(() => calculateSeries(input), [input]);
@@ -45,10 +67,23 @@ export default function CalculatorTab({ initial }: { initial?: Partial<Calculato
               if (!name.trim()) return;
               setScenarios(addScenario({ ...input, name: name.trim(), corpusGoal: goal }));
               setName("");
+              setSelectedScenarioId(null);
             }}
           >
             Save scenario
           </button>
+          {selectedScenarioId && (
+            <button
+              className="rounded bg-green-600 px-4 py-2 text-white"
+              onClick={() => {
+                const patch: Partial<Scenario> = { ...input, corpusGoal: goal };
+                if (name.trim()) patch.name = name.trim();
+                setScenarios(updateScenario(selectedScenarioId, patch));
+              }}
+            >
+              Update scenario
+            </button>
+          )}
         </div>
       </div>
       <div className="space-y-4">
@@ -59,9 +94,17 @@ export default function CalculatorTab({ initial }: { initial?: Partial<Calculato
         <h3 className="mb-2 font-semibold">Saved scenarios</h3>
         <ScenarioTable
           scenarios={scenarios}
-          onDelete={(id) => setScenarios(deleteScenario(id))}
+          onDelete={(id) => {
+            setScenarios(deleteScenario(id));
+            if (selectedScenarioId === id) setSelectedScenarioId(null);
+          }}
           onDuplicate={(id) => setScenarios(duplicateScenario(id))}
-          onLoad={(s) => { setInput(s); setGoal(s.corpusGoal); }}
+          onLoad={(s) => {
+            setInput(s);
+            setGoal(s.corpusGoal);
+            setName(s.name);
+            setSelectedScenarioId(s.id);
+          }}
         />
       </div>
     </div>
