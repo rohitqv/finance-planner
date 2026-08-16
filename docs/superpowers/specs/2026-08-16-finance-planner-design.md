@@ -169,9 +169,13 @@ Build a month-by-month cash flow over `Z*12` months:
 - **Gap vs. current plan** — short/surplus figure and extra SIP to close it.
 - **Multiple retirement ages** — run steps 1–5 for e.g. retire @ 50 / 55 / 60 and
   show as side-by-side columns (mirrors the user's RET@50/@55/@60 spreadsheet).
-- **Year-by-year table + chart** — accumulation up to retirement, then depletion
-  to lifespan (correct version of the user's spreadsheet: age, year, inflated
-  expense, corpus balance drawing down).
+- **Year-by-year table + chart** — depletion from retirement to lifespan (age,
+  year, inflated expense, corpus balance drawing down). Scope decision made
+  during implementation (2026-08-16): this table covers the depletion phase
+  only, not the accumulation phase — the Investment Calculator tab's own
+  growth chart already visualizes accumulation, and it's what the
+  Retirement→Calculator handoff hands the user off to. Confirmed with the
+  user rather than expanding this table to duplicate that view.
 
 ### Correctness anchors (unit tests)
 
