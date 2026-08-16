@@ -37,6 +37,6 @@ export function computeReturns(input: CalculatorInput): { cagr: number; xirr: nu
   const finalMonth = Math.round(input.years * 12);
   return {
     cagr: cagr(futureValue, totalInvested, input.years),
-    xirr: xirrFromCashflows(flows, futureValue, finalMonth),
+    xirr: flows.length === 0 ? 0 : xirrFromCashflows(flows, futureValue, finalMonth),
   };
 }

@@ -31,3 +31,11 @@ describe("computeReturns — pure SIP", () => {
     expect(r.cagr).toBeLessThan(r.xirr);
   });
 });
+
+describe("computeReturns — zero investment", () => {
+  it("XIRR is 0, matching CAGR, when there is no lumpsum and no SIP", () => {
+    const r = computeReturns({ ...base, lumpsum: 0, monthlySip: 0 });
+    expect(r.cagr).toBe(0);
+    expect(r.xirr).toBe(0);
+  });
+});
