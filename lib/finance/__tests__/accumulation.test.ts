@@ -8,18 +8,18 @@ const base: CalculatorInput = {
 };
 
 describe("accumulate — pure lumpsum", () => {
-  it("compounds a lumpsum at the monthly rate", () => {
+  it("compounds a lumpsum at the effective monthly rate, reproducing the annual rate exactly after whole years", () => {
     const r = accumulate({ ...base, lumpsum: 1_000_000, monthlySip: 0, annualReturn: 12, years: 10 });
-    // 1,000,000 * (1 + 0.12/12)^120
-    const expected = 1_000_000 * Math.pow(1 + 0.12 / 12, 120);
+    // 1,000,000 * (1.12)^10 — effective annual compounding, independent of monthly conversion
+    const expected = 1_000_000 * Math.pow(1.12, 10);
     expect(r.futureValue).toBeCloseTo(expected, 2);
     expect(r.totalInvested).toBe(1_000_000);
   });
 });
 
 describe("accumulate — pure SIP", () => {
-  it("matches the ordinary-annuity FV formula", () => {
-    const P = 10_000, i = 0.12 / 12, n = 120;
+  it("matches the ordinary-annuity FV formula using the effective monthly rate", () => {
+    const P = 10_000, i = Math.pow(1.12, 1 / 12) - 1, n = 120;
     const r = accumulate({ ...base, lumpsum: 0, monthlySip: P, annualReturn: 12, years: 10 });
     const expected = P * ((Math.pow(1 + i, n) - 1) / i);
     expect(r.futureValue).toBeCloseTo(expected, 2);

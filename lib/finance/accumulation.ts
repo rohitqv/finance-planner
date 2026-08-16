@@ -20,7 +20,7 @@ export function accumulate(input: CalculatorInput): {
   series: MonthlyPoint[];
 } {
   const months = Math.round(input.years * 12);
-  const i = input.annualReturn / 100 / 12;
+  const i = Math.pow(1 + input.annualReturn / 100, 1 / 12) - 1; // effective monthly rate
   const flows = buildCashflows(input);
 
   let totalInvested = 0;
