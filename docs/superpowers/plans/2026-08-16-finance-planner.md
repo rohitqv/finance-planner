@@ -686,7 +686,7 @@ describe("computeRetirement — corpus depletion round-trip", () => {
     const i = base.postReturnPct / 100;
     let bal = r.corpusNeededAtRetirement;
     for (const row of r.drawdown) {
-      bal = bal * (1 + i) - row.annualExpenseInflated;
+      bal = (bal - row.annualExpenseInflated) * (1 + i); // withdraw at year start, then grow
     }
     expect(Math.abs(bal)).toBeLessThan(r.corpusNeededAtRetirement * 0.001);
   });
