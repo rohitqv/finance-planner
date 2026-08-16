@@ -6,7 +6,9 @@ import RetirementResults from "./RetirementResults";
 import DrawdownTable from "./DrawdownTable";
 import DrawdownChart from "./DrawdownChart";
 import RetirementAgeCompare from "./RetirementAgeCompare";
-import { computeRetirement, type RetirementInput } from "@/lib/finance/retirement";
+import AccumulationChart from "./AccumulationChart";
+import AccumulationTable from "./AccumulationTable";
+import { computeRetirement, computeAccumulationSplit, type RetirementInput } from "@/lib/finance/retirement";
 import { loadPlan, savePlan } from "@/store/retirementPlan";
 
 const DEFAULT: RetirementInput = {
@@ -35,6 +37,10 @@ export default function RetirementTab({
   useEffect(() => { savePlan(input); }, [input]);
 
   const result = useMemo(() => computeRetirement(input), [input]);
+  const split = useMemo(
+    () => computeAccumulationSplit(input, result.requiredMonthlySip),
+    [input, result.requiredMonthlySip],
+  );
 
   // Guard the handoff at the source: requiredMonthlySip can be an
   // intentional Infinity (see lib/finance/retirement.ts) when there's no
@@ -80,6 +86,15 @@ export default function RetirementTab({
         <DrawdownChart rows={result.drawdown} />
       </div>
       <div className="md:col-span-2">
+        {split.required.length > 0 ? (
+          <div className="mb-6">
+            <h3 className="mb-2 font-semibold">
+              Growing to retirement{split.surplus ? " — required vs. surplus" : ""}
+            </h3>
+            <AccumulationChart required={split.required} surplus={split.surplus} startAge={input.currentAge} />
+            <AccumulationTable required={split.required} surplus={split.surplus} startAge={input.currentAge} />
+          </div>
+        ) : null}
         <h3 className="mb-2 font-semibold">Year-by-year drawdown</h3>
         <DrawdownTable rows={result.drawdown} />
         <div className="mt-6">
