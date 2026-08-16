@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import InputPanel from "./InputPanel";
 import ResultCards from "./ResultCards";
 import GrowthChart from "./GrowthChart";
@@ -32,6 +32,14 @@ function sanitizeInitial(initial?: Partial<CalculatorInput>): Partial<Calculator
   return out;
 }
 
+// `corpusGoal` isn't part of `CalculatorInput`, so it doesn't go through
+// `sanitizeInitial` above — but it crosses the same external prop boundary
+// (the retirement handoff) and feeds straight into `GrowthChart`'s `goal`
+// line, so it needs the same finiteness guard.
+function sanitizeGoal(goal?: number): number | undefined {
+  return typeof goal === "number" && Number.isFinite(goal) ? goal : undefined;
+}
+
 export default function CalculatorTab({ initial }: { initial?: Partial<CalculatorInput> & { corpusGoal?: number } } = {}) {
   // Lazy initializers read the handoff prop / localStorage synchronously
   // while computing the first render's state, instead of via a mount-time
@@ -42,9 +50,22 @@ export default function CalculatorTab({ initial }: { initial?: Partial<Calculato
   // after mount.
   const [input, setInput] = useState<CalculatorInput>(() => ({ ...DEFAULT, ...sanitizeInitial(initial) }));
   const [name, setName] = useState("");
-  const [goal, setGoal] = useState<number | undefined>(initial?.corpusGoal);
-  const [scenarios, setScenarios] = useState<Scenario[]>(loadScenarios);
+  const [goal, setGoal] = useState<number | undefined>(sanitizeGoal(initial?.corpusGoal));
+  // Unlike `input`/`goal` above, `scenarios` can't use a lazy initializer:
+  // `loadScenarios()` reads localStorage, which is unavailable during SSR
+  // (it guards `typeof window` and returns `[]` there). If the initializer
+  // called it directly, the server-rendered HTML (always `[]`) would diverge
+  // from the client's hydration render (real saved scenarios) whenever a
+  // returning user has any saved — a hydration mismatch. So the initial
+  // render always starts from `[]` (matching the server), and the real list
+  // is loaded after mount, once hydration has already committed.
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate post-hydration read of localStorage (not a render loop): the client-only data can't be part of the SSR-safe initial render (see comment on `scenarios` above), so it's fetched once here after mount.
+    setScenarios(loadScenarios());
+  }, []);
 
   const result = useMemo(() => calculate(input), [input]);
   const series = useMemo(() => calculateSeries(input), [input]);
