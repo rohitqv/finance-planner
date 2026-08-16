@@ -1,4 +1,5 @@
 import { accumulate } from "./accumulation";
+import type { MonthlyPoint } from "./types";
 
 export type ExpensePhase = { fromAge: number; toAge: number; monthlyExpenseToday: number };
 export type RetirementInput = {
@@ -16,6 +17,10 @@ export type RetirementInput = {
 export type DrawdownRow = {
   age: number; year: number; yearsFromNow: number;
   annualExpenseToday: number; annualExpenseInflated: number; corpusBalance: number;
+};
+export type AccumulationSplitResult = {
+  required: MonthlyPoint[];
+  surplus: MonthlyPoint[] | null;
 };
 export type RetirementResult = {
   corpusNeededAtRetirement: number;
@@ -116,4 +121,28 @@ export function computeRetirement(input: RetirementInput): RetirementResult {
     extraSipToCloseGap: Math.max(0, extraSipToCloseGap),
     drawdown,
   };
+}
+
+export function computeAccumulationSplit(
+  input: RetirementInput, requiredMonthlySip: number,
+): AccumulationSplitResult {
+  const accumYears = input.retirementAge - input.currentAge;
+  if (accumYears <= 0 || !Number.isFinite(requiredMonthlySip)) {
+    return { required: [], surplus: null };
+  }
+
+  const required = accumulate({
+    lumpsum: input.currentCorpus, monthlySip: requiredMonthlySip, stepUpPct: 0,
+    annualReturn: input.preReturnPct, years: accumYears, inflationPct: 0,
+  }).series;
+
+  const surplusAmount = input.currentMonthlyInvestment - requiredMonthlySip;
+  const surplus = surplusAmount > 0
+    ? accumulate({
+        lumpsum: 0, monthlySip: surplusAmount, stepUpPct: 0,
+        annualReturn: input.preReturnPct, years: accumYears, inflationPct: 0,
+      }).series
+    : null;
+
+  return { required, surplus };
 }

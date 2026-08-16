@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeRetirement, requiredSip, type RetirementInput } from "@/lib/finance/retirement";
+import { computeRetirement, computeAccumulationSplit, requiredSip, type RetirementInput } from "@/lib/finance/retirement";
 import { accumulate } from "@/lib/finance/accumulation";
 
 const base: RetirementInput = {
@@ -93,5 +93,50 @@ describe("computeRetirement — phases", () => {
     });
     const withoutPhase = computeRetirement(base);
     expect(withPhase.corpusNeededAtRetirement).toBeLessThan(withoutPhase.corpusNeededAtRetirement);
+  });
+});
+
+describe("computeAccumulationSplit", () => {
+  it("the Required series lands on the corpus target in its final year", () => {
+    const r = computeRetirement(base);
+    const split = computeAccumulationSplit(base, r.requiredMonthlySip);
+    const accumYears = base.retirementAge - base.currentAge;
+    expect(split.required).toHaveLength(accumYears);
+    expect(split.required[accumYears - 1].value).toBeCloseTo(r.corpusNeededAtRetirement, -1);
+  });
+
+  it("returns null surplus when there is no surplus", () => {
+    const split = computeAccumulationSplit(
+      { ...base, currentMonthlyInvestment: 0 }, 50_000,
+    );
+    expect(split.surplus).toBeNull();
+  });
+
+  it("returns a surplus series sized to the excess over the required SIP", () => {
+    const requiredSipAmount = 50_000;
+    const split = computeAccumulationSplit(
+      { ...base, currentMonthlyInvestment: 80_000 }, requiredSipAmount,
+    );
+    expect(split.surplus).not.toBeNull();
+    const accumYears = base.retirementAge - base.currentAge;
+    const expectedSurplusFv = accumulate({
+      lumpsum: 0, monthlySip: 30_000, stepUpPct: 0,
+      annualReturn: base.preReturnPct, years: accumYears, inflationPct: 0,
+    }).futureValue;
+    expect(split.surplus![accumYears - 1].value).toBeCloseTo(expectedSurplusFv, -1);
+  });
+
+  it("returns empty series when there are zero or negative years to retirement", () => {
+    const split = computeAccumulationSplit(
+      { ...base, retirementAge: base.currentAge }, 50_000,
+    );
+    expect(split.required).toEqual([]);
+    expect(split.surplus).toBeNull();
+  });
+
+  it("returns empty series when requiredMonthlySip is not finite", () => {
+    const split = computeAccumulationSplit(base, Infinity);
+    expect(split.required).toEqual([]);
+    expect(split.surplus).toBeNull();
   });
 });
