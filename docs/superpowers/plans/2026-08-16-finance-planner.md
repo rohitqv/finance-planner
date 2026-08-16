@@ -15,7 +15,7 @@
 - Results are never persisted — only inputs are stored; all metrics recompute from inputs.
 - localStorage keys are versioned: `finance-planner:scenarios:v1`, `finance-planner:retirement:v1`.
 - Client-side only in v1 — no API routes, no server runtime, no env vars.
-- Monthly return derived as `r/12`; SIP contributions are month-end (ordinary annuity) unless a test states otherwise.
+- Monthly return derived as the **effective** monthly rate `(1 + r/100)^(1/12) - 1` — NOT the nominal `r/12` — so that `r` is a true effective annual rate: a pure lumpsum's CAGR and XIRR reproduce `r` exactly, regardless of compounding frequency. (Corrected 2026-08-16 during Task 4: the original `r/12` nominal-rate draft contradicted this document's own correctness anchor, "pure lumpsum → CAGR = XIRR = r exactly" — see Task 3 for the resolution.) SIP contributions are month-end (ordinary annuity) unless a test states otherwise.
 - TDD: write the failing test first, watch it fail, implement minimally, watch it pass, commit.
 
 ---
@@ -250,7 +250,7 @@ git commit -m "feat: add finance types and INR/percent formatting"
 - Consumes: `CalculatorInput`, `MonthlyPoint` from `types.ts`.
 - Produces:
   - `buildCashflows(input: CalculatorInput): { month: number; amount: number }[]` — negative `amount` = outflow (investment). Month 0 = lumpsum; months 1..Z*12 = SIP with annual step-up.
-  - `accumulate(input: CalculatorInput): { futureValue: number; totalInvested: number; series: MonthlyPoint[] }` — compounds every cashflow at `r/12` monthly to month `Z*12`; `series` is one point per year end (invested-to-date vs. value-to-date).
+  - `accumulate(input: CalculatorInput): { futureValue: number; totalInvested: number; series: MonthlyPoint[] }` — compounds every cashflow at the effective monthly rate `(1+r/100)^(1/12)-1` to month `Z*12`; `series` is one point per year end (invested-to-date vs. value-to-date).
 
 - [ ] **Step 1: Write failing tests**
 
@@ -266,18 +266,18 @@ const base: CalculatorInput = {
 };
 
 describe("accumulate — pure lumpsum", () => {
-  it("compounds a lumpsum at the monthly rate", () => {
+  it("compounds a lumpsum at the effective monthly rate, reproducing the annual rate exactly after whole years", () => {
     const r = accumulate({ ...base, lumpsum: 1_000_000, monthlySip: 0, annualReturn: 12, years: 10 });
-    // 1,000,000 * (1 + 0.12/12)^120
-    const expected = 1_000_000 * Math.pow(1 + 0.12 / 12, 120);
+    // 1,000,000 * (1.12)^10 — effective annual compounding, independent of monthly conversion
+    const expected = 1_000_000 * Math.pow(1.12, 10);
     expect(r.futureValue).toBeCloseTo(expected, 2);
     expect(r.totalInvested).toBe(1_000_000);
   });
 });
 
 describe("accumulate — pure SIP", () => {
-  it("matches the ordinary-annuity FV formula", () => {
-    const P = 10_000, i = 0.12 / 12, n = 120;
+  it("matches the ordinary-annuity FV formula using the effective monthly rate", () => {
+    const P = 10_000, i = Math.pow(1.12, 1 / 12) - 1, n = 120;
     const r = accumulate({ ...base, lumpsum: 0, monthlySip: P, annualReturn: 12, years: 10 });
     const expected = P * ((Math.pow(1 + i, n) - 1) / i);
     expect(r.futureValue).toBeCloseTo(expected, 2);
@@ -340,7 +340,7 @@ export function accumulate(input: CalculatorInput): {
   series: MonthlyPoint[];
 } {
   const months = Math.round(input.years * 12);
-  const i = input.annualReturn / 100 / 12;
+  const i = Math.pow(1 + input.annualReturn / 100, 1 / 12) - 1; // effective monthly rate
   const flows = buildCashflows(input);
 
   let totalInvested = 0;
