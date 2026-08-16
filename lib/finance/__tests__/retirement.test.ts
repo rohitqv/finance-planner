@@ -98,9 +98,10 @@ describe("computeRetirement — phases", () => {
 
 describe("computeAccumulationSplit", () => {
   it("the Required series lands on the corpus target in its final year", () => {
-    const r = computeRetirement(base);
-    const split = computeAccumulationSplit(base, r.requiredMonthlySip);
-    const accumYears = base.retirementAge - base.currentAge;
+    const input = { ...base, currentCorpus: 2_000_000 };
+    const r = computeRetirement(input);
+    const split = computeAccumulationSplit(input, r.requiredMonthlySip);
+    const accumYears = input.retirementAge - input.currentAge;
     expect(split.required).toHaveLength(accumYears);
     expect(split.required[accumYears - 1].value).toBeCloseTo(r.corpusNeededAtRetirement, -1);
   });
