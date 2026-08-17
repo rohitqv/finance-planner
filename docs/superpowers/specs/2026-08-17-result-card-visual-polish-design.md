@@ -64,8 +64,29 @@ card in `RetirementResults`):
 - A small ▲ (positive) / ▼ (negative) icon precedes the value,
   `aria-hidden="true"` since it's decorative — the color+icon pairing
   together means the signal isn't conveyed by color alone (colorblind
-  accessibility), while the icon stays out of the accessible name so
-  screen readers just read the label and formatted value as before.
+  accessibility).
+- **Correction (found in final review):** the icon being `aria-hidden`
+  is only safe where the *label itself* already carries the sign in
+  words. That's true in `RetirementResults` — the label swaps between
+  "Shortfall" and "Surplus" by sign, so a screen reader still gets the
+  full meaning even with the icon hidden and the value shown as
+  `Math.abs(...)`. It is NOT true in `ResultCards`: the label is a
+  constant ("Gain", "CAGR", "XIRR") regardless of sign, so with the icon
+  hidden and the value's own `-` stripped by `Math.abs`, a screen reader
+  would read a −₹1,00,000 loss identically to a +₹1,00,000 gain — a
+  regression from the pre-change behavior, where `formatINR`'s raw `-`
+  was at least audible. `ResultCards`' signed cards therefore need an
+  additional `<span className="sr-only">negative </span>` immediately
+  before the value when `!positive`, so the announced text becomes
+  "Gain negative ₹1,00,000" for a loss. `RetirementResults` needs no
+  such span — its label already disambiguates.
+- Signed-card labels use the same full-opacity `text-green-700`/
+  `text-red-700` as the rest of the card (inherited, no `opacity-*`
+  override). An earlier implementation reduced the label to 70% opacity
+  for a visually "muted" look; that composites the text color toward the
+  light tint background and drops contrast below WCAG AA (measured
+  ~2.8:1–3.6:1 against the ≥4.5:1 requirement for the two tint colors).
+  The label must stay at full opacity, matching the value's contrast.
 - The value itself is formatted from `Math.abs(...)`, not the raw signed
   number — `formatINR`'s `toLocaleString` puts a bare `-` before the
   digits (e.g. `formatINR(-500000)` → `"₹-5,00,000"`), which would double
