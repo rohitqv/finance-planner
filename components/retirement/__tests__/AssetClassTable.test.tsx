@@ -4,11 +4,12 @@ import AssetClassTable from "@/components/retirement/AssetClassTable";
 import { DEFAULT_ASSET_CLASSES } from "@/lib/finance/retirement";
 
 describe("AssetClassTable", () => {
-  it("renders all four fixed asset classes", () => {
+  it("renders all five fixed asset classes", () => {
     render(<AssetClassTable value={DEFAULT_ASSET_CLASSES} onChange={vi.fn()} />);
     expect(screen.getByText("Mutual Fund")).toBeInTheDocument();
     expect(screen.getByText("Gold")).toBeInTheDocument();
     expect(screen.getByText("EPFO")).toBeInTheDocument();
+    expect(screen.getByText("Fixed Deposit")).toBeInTheDocument();
     expect(screen.getByText("Real Estate")).toBeInTheDocument();
   });
 

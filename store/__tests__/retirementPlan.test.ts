@@ -33,7 +33,7 @@ describe("retirement plan store", () => {
 
     const loaded = loadPlan();
     expect(loaded).not.toBeNull();
-    expect(loaded!.assetClasses).toHaveLength(4);
+    expect(loaded!.assetClasses).toHaveLength(5);
 
     const mutualFund = loaded!.assetClasses.find((a) => a.key === "mutualFund")!;
     expect(mutualFund.amount).toBe(500_000);
@@ -73,7 +73,7 @@ describe("retirement plan store", () => {
     const loaded = loadPlan();
     expect(loaded).not.toBeNull();
     expect(Array.isArray(loaded!.assetClasses)).toBe(true);
-    expect(loaded!.assetClasses).toHaveLength(4);
+    expect(loaded!.assetClasses).toHaveLength(5);
   });
 
   it("migrates a plan with an empty assetClasses array instead of passing it through with zero classes", () => {
@@ -85,6 +85,35 @@ describe("retirement plan store", () => {
     localStorage.setItem(KEY, JSON.stringify(partial));
 
     const loaded = loadPlan();
-    expect(loaded!.assetClasses).toHaveLength(4);
+    expect(loaded!.assetClasses).toHaveLength(5);
+  });
+
+  it("adds a newly-introduced asset class (Fixed Deposit) to a plan saved under the older 4-class shape, without touching the other classes' saved amounts", () => {
+    const olderShapePlan = {
+      currentAge: 30, retirementAge: 55, lifespanAge: 85,
+      currentMonthlyExpense: 50000, inflationPct: 6, preReturnPct: 12, postReturnPct: 8,
+      phases: [], currentMonthlyInvestment: 0,
+      assetClasses: [
+        { key: "mutualFund", label: "Mutual Fund", amount: 300_000, ratePct: 12, includeInRetirement: true },
+        { key: "gold", label: "Gold", amount: 50_000, ratePct: 8, includeInRetirement: false },
+        { key: "epfo", label: "EPFO", amount: 400_000, ratePct: 8.25, includeInRetirement: true },
+        { key: "realEstate", label: "Real Estate", amount: 9_000_000, ratePct: 8, includeInRetirement: true },
+      ],
+    };
+    localStorage.setItem(KEY, JSON.stringify(olderShapePlan));
+
+    const loaded = loadPlan();
+    expect(loaded!.assetClasses).toHaveLength(5);
+
+    // The 4 previously-saved classes keep their exact saved values.
+    expect(loaded!.assetClasses.find((a) => a.key === "mutualFund")).toEqual(olderShapePlan.assetClasses[0]);
+    expect(loaded!.assetClasses.find((a) => a.key === "gold")).toEqual(olderShapePlan.assetClasses[1]);
+    expect(loaded!.assetClasses.find((a) => a.key === "epfo")).toEqual(olderShapePlan.assetClasses[2]);
+    expect(loaded!.assetClasses.find((a) => a.key === "realEstate")).toEqual(olderShapePlan.assetClasses[3]);
+
+    // Fixed Deposit is newly added at its default, not silently dropped.
+    const fixedDeposit = loaded!.assetClasses.find((a) => a.key === "fixedDeposit")!;
+    expect(fixedDeposit.amount).toBe(0);
+    expect(fixedDeposit.includeInRetirement).toBe(true);
   });
 });

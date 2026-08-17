@@ -3,7 +3,7 @@ import type { MonthlyPoint } from "./types";
 
 export type ExpensePhase = { fromAge: number; toAge: number; monthlyExpenseToday: number };
 
-export type AssetClassKey = "mutualFund" | "gold" | "epfo" | "realEstate";
+export type AssetClassKey = "mutualFund" | "gold" | "epfo" | "fixedDeposit" | "realEstate";
 export type AssetClass = {
   key: AssetClassKey;
   label: string;
@@ -16,6 +16,7 @@ export const DEFAULT_ASSET_CLASSES: AssetClass[] = [
   { key: "mutualFund", label: "Mutual Fund", amount: 0, ratePct: 12, includeInRetirement: true },
   { key: "gold", label: "Gold", amount: 0, ratePct: 8, includeInRetirement: true },
   { key: "epfo", label: "EPFO", amount: 0, ratePct: 8.25, includeInRetirement: true },
+  { key: "fixedDeposit", label: "Fixed Deposit", amount: 0, ratePct: 7, includeInRetirement: true },
   { key: "realEstate", label: "Real Estate", amount: 0, ratePct: 8, includeInRetirement: true },
 ];
 
