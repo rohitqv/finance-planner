@@ -56,4 +56,9 @@ describe("RetirementResults", () => {
     expect(screen.getByText(/lifespan must be greater/i)).toBeInTheDocument();
     expect(screen.queryByText("Shortfall")).not.toBeInTheDocument();
   });
+
+  it("does not apply opacity-70 to the Shortfall/Surplus label", () => {
+    render(<RetirementResults result={shortfallResult} />);
+    expect(screen.getByText("Shortfall").className).not.toContain("opacity-70");
+  });
 });

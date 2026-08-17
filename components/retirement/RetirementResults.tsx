@@ -18,7 +18,7 @@ export default function RetirementResults({
 }: { result: RetirementResult; invalidLifespan?: boolean }) {
   if (invalidLifespan) {
     return (
-      <div className="rounded border border-red-400 bg-red-50 p-3 text-sm text-red-700">
+      <div className="rounded-xl border border-red-400 bg-red-50 p-4 shadow-sm text-sm text-red-700">
         Lifespan must be greater than retirement age. The ₹0 corpus and SIP
         figures a plan like this would otherwise show are not real results —
         adjust the ages to see the actual numbers.
@@ -49,7 +49,7 @@ export default function RetirementResults({
               : "rounded-xl border p-4 shadow-sm"
           }
         >
-          <div className={`text-xs uppercase ${c.signed ? "opacity-70" : "text-gray-500"}`}>
+          <div className={`text-xs uppercase ${c.signed ? "" : "text-gray-500"}`}>
             {c.label}
           </div>
           <div className="text-lg font-semibold">

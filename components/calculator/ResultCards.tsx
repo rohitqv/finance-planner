@@ -39,7 +39,7 @@ export default function ResultCards({ result }: { result: CalculatorResult }) {
               : "rounded-xl border p-4 shadow-sm"
           }
         >
-          <div className={`text-xs uppercase ${c.signed ? "opacity-70" : "text-gray-500"}`}>
+          <div className={`text-xs uppercase ${c.signed ? "" : "text-gray-500"}`}>
             {c.label}
           </div>
           <div className="text-lg font-semibold">
@@ -48,6 +48,7 @@ export default function ResultCards({ result }: { result: CalculatorResult }) {
                 {c.positive ? "▲" : "▼"}
               </span>
             )}
+            {c.signed && !c.positive && <span className="sr-only">negative </span>}
             <span>{c.value}</span>
           </div>
         </div>
