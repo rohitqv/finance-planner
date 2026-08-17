@@ -25,9 +25,9 @@ describe("AssetClassTable", () => {
   it("calls onChange with an updated rate when a rate field changes", () => {
     const onChange = vi.fn();
     render(<AssetClassTable value={DEFAULT_ASSET_CLASSES} onChange={onChange} />);
-    fireEvent.change(screen.getByLabelText("EPFO rate"), { target: { value: "8.25" } });
+    fireEvent.change(screen.getByLabelText("EPFO rate"), { target: { value: "9.5" } });
     const updated = onChange.mock.calls[0][0];
-    expect(updated.find((a: { key: string }) => a.key === "epfo").ratePct).toBe(8.25);
+    expect(updated.find((a: { key: string }) => a.key === "epfo").ratePct).toBe(9.5);
   });
 
   it("calls onChange with includeInRetirement toggled off", () => {
