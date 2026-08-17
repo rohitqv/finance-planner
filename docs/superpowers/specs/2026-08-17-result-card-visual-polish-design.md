@@ -6,8 +6,7 @@ Give the result cards across both tabs — Calculator's `ResultCards` and
 Retirement's `RetirementResults` — a more polished look: color-code signed
 metrics (gain/loss, shortfall/surplus) so their meaning is visible at a
 glance, and improve spacing/shape so cards read as a deliberate design
-rather than bare `rounded border p-3` boxes. Extend the same color
-convention (text-only) to `AccumulationTable`'s Surplus column.
+rather than bare `rounded border p-3` boxes.
 
 Chosen through visual brainstorming (three card-style options compared
 side by side, then a flat-vs-hero layout comparison): tinted background +
@@ -28,7 +27,16 @@ no hero/enlarged primary metric).
   favor of equal-size cards (see Layout below).
 - **No changes to `GrowthChart`/`AccumulationChart`/`DrawdownChart`**
   (Recharts visuals) or to `InputPanel`/`RetirementInputs` forms — scoped
-  to the result-card components and the one table column noted above.
+  to the two result-card components below.
+- **No color-coding for `AccumulationTable`'s Surplus column.** Corrected
+  from an earlier draft of this spec, which incorrectly assumed it was a
+  signed value like `RetirementResults`' Shortfall/Surplus card. It is
+  not: `lib/finance/retirement.ts:194-195` only ever populates
+  `split.surplus` when `surplusAmount > 0` (it's `null` otherwise, which
+  `AccumulationTable`'s existing "shows only Required when there is no
+  surplus" test covers) — the column's value can never be negative, so a
+  red/negative branch would be dead, untestable code. `AccumulationTable`
+  is untouched by this change.
 
 ## Design spec
 
@@ -69,12 +77,6 @@ card in `RetirementResults`):
   leading-`-` quirk but gets the same `Math.abs` treatment for consistency
   between the two.
 
-**`AccumulationTable` Surplus column**: text-only `text-green-700` /
-`text-red-700` on the value, no background tint and no icon. A tinted
-background per table row/cell would be visually noisy in a scrollable
-table where every row needs a quick scan; color on the number alone is
-sufficient there and keeps the table dense.
-
 **Layout**: cards stay equal-size ("flat") in both `ResultCards` and
 `RetirementResults` — no enlarged hero card for the primary metric. This
 was directly compared against a hero variant during brainstorming and the
@@ -90,8 +92,6 @@ flat layout was preferred.
   icon treatment to the Shortfall/Surplus card only, keyed off
   `result.gap`'s sign; other five cards get the neutral spacing/shape
   update only.
-- `components/retirement/AccumulationTable.tsx`: color the Surplus
-  column's text green/red by sign, no other visual change to the table.
 - No changes to `lib/finance/*` — this is presentation-only; existing
   `formatINR`/`formatPct` outputs are wrapped with the new styling, not
   altered.
@@ -107,7 +107,5 @@ flat layout was preferred.
 - `RetirementResults`: assert the Shortfall/Surplus card colors follow
   `result.gap`'s sign correctly in both directions (existing tests already
   cover the label swap; add the color assertion alongside).
-- `AccumulationTable`: assert a negative surplus value renders with the
-  red text class and a positive one with green.
 - No new test infrastructure needed — same Testing Library patterns
   already used throughout `components/**/__tests__`.
