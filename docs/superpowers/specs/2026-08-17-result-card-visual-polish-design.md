@@ -104,8 +104,11 @@ flat layout was preferred.
   a negative Gain/CAGR/XIRR renders with the red-tint class, ▼ icon, and
   the absolute-value formatted number (no leading `-`); a positive one
   with green-tint, ▲, and the plain formatted number.
-- `RetirementResults`: assert the Shortfall/Surplus card colors follow
-  `result.gap`'s sign correctly in both directions (existing tests already
-  cover the label swap; add the color assertion alongside).
+- `RetirementResults` has no dedicated test file today (only covered
+  indirectly through `RetirementTab.test.tsx`, which doesn't currently
+  assert the Shortfall/Surplus label or color). Add
+  `components/retirement/__tests__/RetirementResults.test.tsx` asserting
+  both the label swap and the new color/icon follow `result.gap`'s sign
+  correctly in both directions.
 - No new test infrastructure needed — same Testing Library patterns
   already used throughout `components/**/__tests__`.
