@@ -8,13 +8,13 @@ import DrawdownChart from "./DrawdownChart";
 import RetirementAgeCompare from "./RetirementAgeCompare";
 import AccumulationChart from "./AccumulationChart";
 import AccumulationTable from "./AccumulationTable";
-import { computeRetirement, computeAccumulationSplit, type RetirementInput } from "@/lib/finance/retirement";
+import { computeRetirement, computeAccumulationSplit, includedCorpusAmount, DEFAULT_ASSET_CLASSES, type RetirementInput } from "@/lib/finance/retirement";
 import { loadPlan, savePlan } from "@/store/retirementPlan";
 
 const DEFAULT: RetirementInput = {
   currentAge: 30, retirementAge: 55, lifespanAge: 85,
   currentMonthlyExpense: 50000, inflationPct: 6, preReturnPct: 12, postReturnPct: 8,
-  phases: [], currentCorpus: 0, currentMonthlyInvestment: 0,
+  phases: [], assetClasses: DEFAULT_ASSET_CLASSES, currentMonthlyInvestment: 0,
 };
 
 export type RetirementHandoff = {
@@ -73,7 +73,7 @@ export default function RetirementTab({
             if (!canHandoff) return;
             onHandoff?.({
               monthlySip: Math.round(result.requiredMonthlySip),
-              lumpsum: input.currentCorpus,
+              lumpsum: includedCorpusAmount(input.assetClasses),
               years: input.retirementAge - input.currentAge,
               corpusGoal: Math.round(result.corpusNeededAtRetirement),
               annualReturn: input.preReturnPct,
@@ -83,6 +83,9 @@ export default function RetirementTab({
         >
           Plan this in Calculator
         </button>
+        <p className="text-xs text-gray-500">
+          Uses only the asset classes counted toward retirement (see checkboxes above).
+        </p>
         <DrawdownChart rows={result.drawdown} />
       </div>
       <div className="md:col-span-2">

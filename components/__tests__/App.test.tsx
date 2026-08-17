@@ -31,7 +31,7 @@ describe("App handoff", () => {
     // Move the plan's pre-retirement return off 12% — the value that
     // happens to coincide with the Calculator tab's own hardcoded default,
     // so a dropped-field bug wouldn't otherwise be visible end-to-end.
-    fireEvent.change(screen.getByLabelText(/pre-retirement return/i), { target: { value: "8" } });
+    fireEvent.change(screen.getByLabelText(/return on monthly investment/i), { target: { value: "8" } });
     fireEvent.click(screen.getByRole("button", { name: /plan this in calculator/i }));
 
     const returnInput = screen.getByLabelText(/expected annual return/i) as HTMLInputElement;

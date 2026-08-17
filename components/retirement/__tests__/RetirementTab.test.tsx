@@ -28,12 +28,23 @@ describe("RetirementTab", () => {
     // Change the pre-retirement return away from the value that happens to
     // coincide with the Calculator tab's hardcoded default (12%), so this
     // test can actually distinguish "wired through" from "silently dropped".
-    fireEvent.change(screen.getByLabelText(/pre-retirement return/i), { target: { value: "8" } });
+    fireEvent.change(screen.getByLabelText(/return on monthly investment/i), { target: { value: "8" } });
     fireEvent.change(screen.getByLabelText(/^inflation/i), { target: { value: "5" } });
     fireEvent.click(screen.getByRole("button", { name: /plan this in calculator/i }));
     const arg = onHandoff.mock.calls[0][0];
     expect(arg.annualReturn).toBe(8);
     expect(arg.inflationPct).toBe(5);
+  });
+
+  it("hands off a lumpsum equal to the sum of included asset-class amounts only", () => {
+    const onHandoff = vi.fn();
+    render(<RetirementTab onHandoff={onHandoff} />);
+    fireEvent.change(screen.getByLabelText("Mutual Fund amount"), { target: { value: "100000" } });
+    fireEvent.change(screen.getByLabelText("Real Estate amount"), { target: { value: "9000000" } });
+    fireEvent.click(screen.getByLabelText("Include Real Estate in retirement")); // exclude it
+    fireEvent.click(screen.getByRole("button", { name: /plan this in calculator/i }));
+    const arg = onHandoff.mock.calls[0][0];
+    expect(arg.lumpsum).toBe(100000);
   });
 
   it("disables the handoff button (and does not call onHandoff) when retirement age <= current age", () => {
