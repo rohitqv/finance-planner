@@ -153,6 +153,41 @@ describe("computeAccumulationSplit", () => {
     expect(split.required).toEqual([]);
     expect(split.surplus).toBeNull();
   });
+
+  it("required series sums each included class at its own rate (not the blended SIP rate) and omits excluded classes", () => {
+    const accumYears = base.retirementAge - base.currentAge;
+    const mutualFundAmount = 1_000_000;
+    const epfoAmount = 1_000_000;
+    const requiredMonthlySip = 20_000;
+    const input: RetirementInput = {
+      ...base,
+      assetClasses: [
+        { key: "mutualFund", label: "Mutual Fund", amount: mutualFundAmount, ratePct: 12, includeInRetirement: true },
+        { key: "gold", label: "Gold", amount: 0, ratePct: 8, includeInRetirement: true },
+        { key: "epfo", label: "EPFO", amount: epfoAmount, ratePct: 8.25, includeInRetirement: true },
+        { key: "realEstate", label: "Real Estate", amount: 5_000_000, ratePct: 8, includeInRetirement: false },
+      ],
+    };
+    const split = computeAccumulationSplit(input, requiredMonthlySip);
+
+    const mfFv = accumulate({
+      lumpsum: mutualFundAmount, monthlySip: 0, stepUpPct: 0,
+      annualReturn: 12, years: accumYears, inflationPct: 0,
+    }).futureValue;
+    const epfoFv = accumulate({
+      lumpsum: epfoAmount, monthlySip: 0, stepUpPct: 0,
+      annualReturn: 8.25, years: accumYears, inflationPct: 0,
+    }).futureValue;
+    const sipFv = accumulate({
+      lumpsum: 0, monthlySip: requiredMonthlySip, stepUpPct: 0,
+      annualReturn: base.preReturnPct, years: accumYears, inflationPct: 0,
+    }).futureValue;
+
+    // Excluded Real Estate (5,000,000 @ 8%) is not part of this sum — if it
+    // leaked in, or if Mutual Fund / EPFO were grown at the blended
+    // preReturnPct (12%) instead of their own rates, this would diverge.
+    expect(split.required[accumYears - 1].value).toBeCloseTo(mfFv + epfoFv + sipFv, 6);
+  });
 });
 
 describe("includedCorpusFutureValue", () => {

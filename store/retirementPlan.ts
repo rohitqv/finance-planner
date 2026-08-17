@@ -23,7 +23,11 @@ export function loadPlan(): RetirementInput | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as LegacyPlan | RetirementInput;
-    if (!("assetClasses" in parsed) || !parsed.assetClasses) {
+    const hasValidAssetClasses =
+      "assetClasses" in parsed &&
+      Array.isArray(parsed.assetClasses) &&
+      parsed.assetClasses.length === 4;
+    if (!hasValidAssetClasses) {
       return migrateLegacyPlan(parsed as LegacyPlan);
     }
     return parsed as RetirementInput;

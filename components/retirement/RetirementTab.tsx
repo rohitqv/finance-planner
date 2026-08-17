@@ -84,7 +84,9 @@ export default function RetirementTab({
           Plan this in Calculator
         </button>
         <p className="text-xs text-gray-500">
-          Uses only the asset classes counted toward retirement (see checkboxes above).
+          Uses only the asset classes counted toward retirement (see checkboxes
+          above), grown at the return on monthly investment rate above — not
+          each asset class&apos;s own rate.
         </p>
         <DrawdownChart rows={result.drawdown} />
       </div>

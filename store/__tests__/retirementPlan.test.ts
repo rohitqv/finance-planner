@@ -61,4 +61,30 @@ describe("retirement plan store", () => {
     const mutualFund = loaded!.assetClasses.find((a) => a.key === "mutualFund")!;
     expect(mutualFund.amount).toBe(0);
   });
+
+  it("migrates a plan with a malformed assetClasses value (not an array) instead of crashing downstream", () => {
+    const corrupted = {
+      currentAge: 30, retirementAge: 55, lifespanAge: 85,
+      currentMonthlyExpense: 50000, inflationPct: 6, preReturnPct: 12, postReturnPct: 8,
+      phases: [], assetClasses: "not-an-array", currentMonthlyInvestment: 0,
+    };
+    localStorage.setItem(KEY, JSON.stringify(corrupted));
+
+    const loaded = loadPlan();
+    expect(loaded).not.toBeNull();
+    expect(Array.isArray(loaded!.assetClasses)).toBe(true);
+    expect(loaded!.assetClasses).toHaveLength(4);
+  });
+
+  it("migrates a plan with an empty assetClasses array instead of passing it through with zero classes", () => {
+    const partial = {
+      currentAge: 30, retirementAge: 55, lifespanAge: 85,
+      currentMonthlyExpense: 50000, inflationPct: 6, preReturnPct: 12, postReturnPct: 8,
+      phases: [], assetClasses: [], currentMonthlyInvestment: 0,
+    };
+    localStorage.setItem(KEY, JSON.stringify(partial));
+
+    const loaded = loadPlan();
+    expect(loaded!.assetClasses).toHaveLength(4);
+  });
 });
