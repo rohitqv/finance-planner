@@ -61,4 +61,27 @@ describe("computeReturns — pure SIP with a negative return", () => {
     expect(Number.isFinite(r.xirr)).toBe(true);
     expect(Math.abs(r.xirr)).toBeLessThan(1); // sanity bound: no monthly-rate blowups
   });
+
+  // These three cover cashflow shapes the two tests above don't touch —
+  // each failed differently against the old Newton-Raphson code (a
+  // lumpsum pinned at the -99.99% floor, a mixed lumpsum+SIP blowup to
+  // 1e+172, and a positive step-up combined with a negative return
+  // blowing up to 1e+99) — so each guards against a distinct regression,
+  // not just the SIP-only blow-up mode already covered.
+  it("XIRR tracks a -20% input for a pure lumpsum (no SIP)", () => {
+    const r = computeReturns({ ...base, lumpsum: 1_000_000, monthlySip: 0, annualReturn: -20, years: 15 });
+    expect(r.xirr).toBeCloseTo(-0.2, 6);
+  });
+
+  it("XIRR tracks a -20% input for a mixed lumpsum + SIP", () => {
+    const r = computeReturns({ ...base, lumpsum: 500_000, monthlySip: 10_000, annualReturn: -20, years: 15 });
+    expect(r.xirr).toBeCloseTo(-0.2, 6);
+  });
+
+  it("XIRR stays finite and sane for a stepped-up SIP with a negative return", () => {
+    const r = computeReturns({ ...base, monthlySip: 10_000, stepUpPct: 10, annualReturn: -20, years: 15 });
+    expect(Number.isFinite(r.xirr)).toBe(true);
+    expect(r.xirr).toBeLessThan(0);
+    expect(Math.abs(r.xirr)).toBeLessThan(1);
+  });
 });

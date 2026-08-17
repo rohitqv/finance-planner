@@ -6,24 +6,20 @@ export function cagr(futureValue: number, totalInvested: number, years: number):
   return Math.pow(futureValue / totalInvested, 1 / years) - 1;
 }
 
-// Every cashflow series this app builds (see buildCashflows) is some
-// negative outflows (lumpsum/SIP contributions, always >= 0 so always
-// non-positive amounts) followed by exactly one non-negative terminal
-// inflow (the projected future value). A cashflow sequence with exactly
-// one sign change has an NPV(rate) that is strictly monotonically
-// decreasing and has at most one root for rate > -1 (standard IRR
-// uniqueness result) — so a bracket-and-bisect search is guaranteed to
-// find it, unlike unbounded Newton-Raphson, which previously diverged to
-// an astronomical value for SIP-only series with a negative true rate:
-// the NPV curve is very flat on the positive side, and Newton's fixed
-// +1%-guess would take ever-larger steps chasing an asymptote instead of
-// stepping toward the (correct) negative root.
-//
-// Finds [lo, hi] with opposite-sign npv() by expanding away from rate=0,
-// doubling the step on each successful move and halving it whenever a
-// step would overflow (dividing by (1+rate)^month underflows toward 0
-// for very long horizons/large amounts as rate approaches -1, which can
-// blow up to +/-Infinity or NaN).
+// A cashflow sequence with exactly one sign change (some negative
+// outflows followed by one non-negative inflow, or vice versa) has an
+// NPV(rate) that is strictly monotonically decreasing and has at most one
+// root for rate > -1 (standard IRR uniqueness result), which is what
+// makes bracket-and-bisect below provably robust — unlike unbounded
+// Newton-Raphson, which previously diverged to an astronomical value for
+// SIP-only series with a negative true rate (the NPV curve is very flat
+// on the positive side, so Newton's fixed +1%-guess took ever-larger
+// steps chasing an asymptote instead of stepping toward the negative
+// root). This app's own cashflows (see buildCashflows) satisfy that
+// precondition for `lumpsum >= 0`, `monthlySip >= 0`, and
+// `stepUpPct >= -100` (a step-up below -100% flips the per-year SIP sign
+// and breaks the single-sign-change assumption — unvalidated at the UI
+// layer, a pre-existing gap this fix doesn't address).
 function bracketRoot(npv: (rate: number) => number): { lo: number; hi: number } | null {
   const atZero = npv(0);
   if (atZero === 0) return { lo: 0, hi: 0 };
@@ -31,6 +27,10 @@ function bracketRoot(npv: (rate: number) => number): { lo: number; hi: number } 
   let known = 0;
   let step = 0.5;
   for (let iter = 0; iter < 100; iter++) {
+    // Expand outward from `known`, doubling on success. Halve on overflow
+    // instead: (1+rate)^month underflows toward 0 as rate approaches -1
+    // for long horizons/large amounts, which can blow npv up to
+    // +/-Infinity or NaN.
     let candidate = positiveSide ? known + step : known - step;
     if (!positiveSide && candidate <= -1) candidate = known + (-1 - known) / 2;
     const value = npv(candidate);
@@ -66,7 +66,12 @@ export function xirrFromCashflows(
     all.reduce((s, f) => s + f.amount / Math.pow(1 + monthlyRate, f.month), 0);
 
   const bracket = bracketRoot(npv);
-  if (!bracket) return 0; // no root found (e.g. a degenerate/single-sign cashflow series)
+  // NaN, not 0 — a returned 0 would be indistinguishable from a genuine
+  // break-even result. This path is only reached when no root could be
+  // bracketed within a safe finite range (e.g. the single-sign-change
+  // precondition above doesn't hold, or magnitudes overflow even at the
+  // search's smallest step) — a real failure, not a computed answer.
+  if (!bracket) return NaN;
   const rate = bisect(npv, bracket.lo, bracket.hi);
   return Math.pow(1 + rate, 12) - 1;
 }
