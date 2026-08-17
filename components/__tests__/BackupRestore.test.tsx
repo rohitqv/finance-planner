@@ -20,6 +20,7 @@ const scenario: Scenario = {
 };
 
 let reloadMock: ReturnType<typeof vi.fn>;
+let lastDownloadFilename: string | undefined;
 
 beforeEach(() => {
   localStorage.clear();
@@ -30,13 +31,17 @@ beforeEach(() => {
   });
   global.URL.createObjectURL = vi.fn(() => "blob:mock-url");
   global.URL.revokeObjectURL = vi.fn();
+  lastDownloadFilename = undefined;
   // jsdom doesn't implement the `download` attribute or blob-URL navigation:
   // clicking the export component's <a href="blob:..."> triggers a real
   // "navigate to another document" attempt, which jsdom logs as "Not
   // implemented: navigation to another Document" (harmless, but noisy).
-  // Stub the click so the test still verifies createObjectURL was called
-  // with the right blob without jsdom attempting real navigation.
-  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  // Stub the click (capturing the anchor's `download` attribute first, so
+  // the filename format is still observable) so the test verifies both
+  // createObjectURL and the filename without jsdom attempting navigation.
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+    lastDownloadFilename = this.download;
+  });
 });
 
 afterEach(() => {
@@ -62,7 +67,7 @@ describe("BackupRestore", () => {
     expect(screen.getByLabelText(/include saved scenarios/i)).toBeChecked();
   });
 
-  it("exports a JSON blob containing the checked data", async () => {
+  it("exports a JSON blob containing the checked data, with a dated filename", async () => {
     savePlan(plan);
     saveScenarios([scenario]);
     render(<BackupRestore />);
@@ -75,6 +80,24 @@ describe("BackupRestore", () => {
     const parsed = JSON.parse(await blob.text());
     expect(parsed.version).toBe(1);
     expect(parsed.retirementPlan).toEqual(plan);
+    expect(parsed.scenarios).toEqual([scenario]);
+    expect(lastDownloadFilename).toMatch(/^finance-planner-backup-\d{4}-\d{2}-\d{2}\.json$/);
+  });
+
+  it("excludes the retirement plan from the export when its checkbox is unchecked", async () => {
+    savePlan(plan);
+    saveScenarios([scenario]);
+    render(<BackupRestore />);
+
+    fireEvent.click(screen.getByLabelText(/include retirement plan/i));
+    expect(screen.getByLabelText(/include retirement plan/i)).not.toBeChecked();
+
+    const createObjectURL = global.URL.createObjectURL as ReturnType<typeof vi.fn>;
+    fireEvent.click(screen.getByRole("button", { name: /export data/i }));
+
+    const blob = createObjectURL.mock.calls[0][0] as Blob;
+    const parsed = JSON.parse(await blob.text());
+    expect(parsed.retirementPlan).toBeUndefined();
     expect(parsed.scenarios).toEqual([scenario]);
   });
 

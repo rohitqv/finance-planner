@@ -67,8 +67,10 @@ export default function BackupRestore() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `finance-planner-backup-${date}.json`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   const handleImportFile = async (file: File) => {
@@ -77,14 +79,19 @@ export default function BackupRestore() {
     try {
       const text = await file.text();
       payload = parseBackupPayload(text);
-    } catch {
-      setError("This file doesn't look like a Finance Planner backup.");
+    } catch (err) {
+      const cause = err instanceof Error ? err.message : undefined;
+      setError(
+        cause
+          ? `This file doesn't look like a Finance Planner backup. ${cause}`
+          : "This file doesn't look like a Finance Planner backup.",
+      );
       return;
     }
 
     let changed = false;
 
-    if (payload.scenarios) {
+    if (payload.scenarios && payload.scenarios.length > 0) {
       saveScenarios(mergeImportedScenarios(loadScenarios(), payload.scenarios));
       changed = true;
     }
@@ -106,7 +113,7 @@ export default function BackupRestore() {
   };
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3 text-sm" onMouseEnter={refresh} onFocus={refresh}>
+    <div className="mb-4 flex flex-wrap items-center gap-3 text-sm" onMouseEnter={refresh} onFocus={refresh} onPointerDown={refresh}>
       <label className="flex items-center gap-1">
         <input
           type="checkbox"
@@ -140,7 +147,7 @@ export default function BackupRestore() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="application/json"
+        accept="application/json,.json"
         className="hidden"
         aria-label="Import backup file"
         onChange={(e) => {
