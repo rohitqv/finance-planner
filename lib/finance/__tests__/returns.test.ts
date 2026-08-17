@@ -39,3 +39,26 @@ describe("computeReturns — zero investment", () => {
     expect(r.xirr).toBe(0);
   });
 });
+
+describe("computeReturns — pure SIP with a negative return", () => {
+  // Regression test: for a level monthly SIP with no lumpsum, XIRR should
+  // converge to essentially the exact input annual return (it's the IRR of
+  // a constant-rate compounding annuity, which equals the compounding rate
+  // itself), the same way the existing positive-return SIP case tracks its
+  // input. Plain Newton-Raphson previously diverged to an astronomical,
+  // nonsensical value here (e.g. "2.65e+99%") instead of finding the true
+  // small negative root, because the initial +1% guess sits on the wrong
+  // side of a negative root for this cashflow shape and there was no
+  // bound/divergence safeguard.
+  it("XIRR tracks a -3% input almost exactly", () => {
+    const r = computeReturns({ ...base, monthlySip: 10_000, annualReturn: -3, years: 15 });
+    expect(r.xirr).toBeCloseTo(-0.03, 6);
+  });
+
+  it("XIRR tracks a -20% input almost exactly (previously diverged)", () => {
+    const r = computeReturns({ ...base, monthlySip: 10_000, annualReturn: -20, years: 15 });
+    expect(r.xirr).toBeCloseTo(-0.2, 6);
+    expect(Number.isFinite(r.xirr)).toBe(true);
+    expect(Math.abs(r.xirr)).toBeLessThan(1); // sanity bound: no monthly-rate blowups
+  });
+});
