@@ -155,6 +155,35 @@ describe("BackupRestore", () => {
     expect(loadPlan()?.currentAge).toBe(30);
   });
 
+  it("refreshes and auto-checks a newly-available scenario list when the user's mouse enters the controls (no reload required)", () => {
+    render(<BackupRestore />);
+    expect(screen.getByLabelText(/include saved scenarios/i)).not.toBeChecked();
+    expect(screen.getByLabelText(/include saved scenarios/i)).toBeDisabled();
+
+    // Data saved elsewhere in the app, after this component already mounted.
+    saveScenarios([scenario]);
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: /export data/i }).parentElement!);
+
+    expect(screen.getByLabelText(/include saved scenarios/i)).toBeChecked();
+    expect(screen.getByLabelText(/include saved scenarios/i)).toBeEnabled();
+  });
+
+  it("does not override a user's manual uncheck when refreshing and the underlying data still exists", () => {
+    savePlan(plan);
+    render(<BackupRestore />);
+    const planCheckbox = screen.getByLabelText(/include retirement plan/i);
+    expect(planCheckbox).toBeChecked();
+
+    fireEvent.click(planCheckbox); // user manually excludes the plan
+    expect(planCheckbox).not.toBeChecked();
+
+    // Plan still exists (unchanged) — a refresh must not silently re-check it.
+    fireEvent.mouseEnter(screen.getByRole("button", { name: /export data/i }).parentElement!);
+
+    expect(planCheckbox).not.toBeChecked();
+  });
+
   describe("SSR hydration safety", () => {
     // Mirrors the equivalent test in components/calculator/__tests__/CalculatorTab.test.tsx.
     // React Testing Library's `render()` wraps mounting in `act()`, which

@@ -18,14 +18,37 @@ export default function BackupRestore() {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  // Re-syncs plan/scenarios from localStorage. This component is mounted
+  // once in app/page.tsx and never remounts on tab switches, so data saved
+  // elsewhere (e.g. a scenario saved on the Calculator tab, or a plan edit
+  // on the Retirement tab) wouldn't otherwise be reflected here without a
+  // full page reload. Called on mount and again whenever the user's mouse
+  // or keyboard focus approaches the export/import controls — a natural
+  // moment right before they'd use them — rather than polling or adding a
+  // change-notification layer to the stores.
+  //
+  // Only auto-(un)checks a checkbox when the underlying data's existence
+  // actually *changes* (none -> some, or some -> none) — never on a refresh
+  // where the existence state is unchanged, so a user's own manual
+  // check/uncheck choice for an export that's already in progress is never
+  // silently overwritten.
+  const refresh = () => {
     const loadedPlan = loadPlan();
     const loadedScenarios = loadScenarios();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate post-hydration read of localStorage, see comment above
+    if ((plan === null) !== (loadedPlan === null)) {
+      setIncludePlan(loadedPlan !== null);
+    }
+    if ((scenarios.length === 0) !== (loadedScenarios.length === 0)) {
+      setIncludeScenarios(loadedScenarios.length > 0);
+    }
     setPlan(loadedPlan);
     setScenarios(loadedScenarios);
-    setIncludePlan(loadedPlan !== null);
-    setIncludeScenarios(loadedScenarios.length > 0);
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate post-hydration read of localStorage, see comment above
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: refresh() is intentionally re-created each render (it closes over current plan/scenarios) and is also called imperatively from onMouseEnter/onFocus below; including it here would defeat the mount-only intent.
   }, []);
 
   const canExport = (includePlan && plan !== null) || (includeScenarios && scenarios.length > 0);
@@ -83,7 +106,7 @@ export default function BackupRestore() {
   };
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+    <div className="mb-4 flex flex-wrap items-center gap-3 text-sm" onMouseEnter={refresh} onFocus={refresh}>
       <label className="flex items-center gap-1">
         <input
           type="checkbox"
