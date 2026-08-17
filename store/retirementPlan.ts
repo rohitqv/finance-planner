@@ -1,13 +1,32 @@
-import type { RetirementInput } from "@/lib/finance/retirement";
+import { DEFAULT_ASSET_CLASSES, type RetirementInput } from "@/lib/finance/retirement";
 
 const KEY = "finance-planner:retirement:v1";
 const canUse = () => typeof window !== "undefined" && !!window.localStorage;
+
+// Shape of a plan saved before the asset-class split shipped: a single
+// currentCorpus number instead of an assetClasses array.
+type LegacyPlan = Omit<RetirementInput, "assetClasses"> & { currentCorpus?: number };
+
+function migrateLegacyPlan(legacy: LegacyPlan): RetirementInput {
+  const { currentCorpus, ...rest } = legacy;
+  const assetClasses = DEFAULT_ASSET_CLASSES.map((a) =>
+    a.key === "mutualFund"
+      ? { ...a, amount: currentCorpus ?? 0, ratePct: legacy.preReturnPct }
+      : a,
+  );
+  return { ...rest, assetClasses };
+}
 
 export function loadPlan(): RetirementInput | null {
   if (!canUse()) return null;
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as RetirementInput) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as LegacyPlan | RetirementInput;
+    if (!("assetClasses" in parsed) || !parsed.assetClasses) {
+      return migrateLegacyPlan(parsed as LegacyPlan);
+    }
+    return parsed as RetirementInput;
   } catch {
     return null;
   }
