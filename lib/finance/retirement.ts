@@ -2,6 +2,23 @@ import { accumulate } from "./accumulation";
 import type { MonthlyPoint } from "./types";
 
 export type ExpensePhase = { fromAge: number; toAge: number; monthlyExpenseToday: number };
+
+export type AssetClassKey = "mutualFund" | "gold" | "epfo" | "realEstate";
+export type AssetClass = {
+  key: AssetClassKey;
+  label: string;
+  amount: number;
+  ratePct: number;
+  includeInRetirement: boolean;
+};
+
+export const DEFAULT_ASSET_CLASSES: AssetClass[] = [
+  { key: "mutualFund", label: "Mutual Fund", amount: 0, ratePct: 12, includeInRetirement: true },
+  { key: "gold", label: "Gold", amount: 0, ratePct: 8, includeInRetirement: true },
+  { key: "epfo", label: "EPFO", amount: 0, ratePct: 8.25, includeInRetirement: true },
+  { key: "realEstate", label: "Real Estate", amount: 0, ratePct: 8, includeInRetirement: true },
+];
+
 export type RetirementInput = {
   currentAge: number;
   retirementAge: number;
@@ -11,9 +28,29 @@ export type RetirementInput = {
   preReturnPct: number;
   postReturnPct: number;
   phases: ExpensePhase[];
-  currentCorpus: number;
+  assetClasses: AssetClass[];
   currentMonthlyInvestment: number;
 };
+
+// Future value at `years` from now of every asset class with
+// includeInRetirement: true, each compounded at its own rate. Excluded
+// classes contribute nothing — not zero-weighted, simply skipped.
+export function includedCorpusFutureValue(assetClasses: AssetClass[], years: number): number {
+  return assetClasses
+    .filter((a) => a.includeInRetirement)
+    .reduce((sum, a) => sum + accumulate({
+      lumpsum: a.amount, monthlySip: 0, stepUpPct: 0,
+      annualReturn: a.ratePct, years, inflationPct: 0,
+    }).futureValue, 0);
+}
+
+// Today's value (no growth) summed over included asset classes only.
+export function includedCorpusAmount(assetClasses: AssetClass[]): number {
+  return assetClasses
+    .filter((a) => a.includeInRetirement)
+    .reduce((sum, a) => sum + a.amount, 0);
+}
+
 export type DrawdownRow = {
   age: number; year: number; yearsFromNow: number;
   annualExpenseToday: number; annualExpenseInflated: number; corpusBalance: number;
@@ -38,14 +75,14 @@ export function annualExpenseTodayForAge(input: RetirementInput, age: number): n
   return monthly * 12;
 }
 
-// Solve flat month-end SIP so that currentCorpus + SIP stream reaches target.
+// Solve flat month-end SIP so that grownCorpus + SIP stream reaches target.
+// `grownCorpus` is the corpus already projected forward to `years` from now
+// (see includedCorpusFutureValue) — this function no longer grows a corpus
+// itself, since callers may be summing several asset classes each compounding
+// at a different rate.
 export function requiredSip(
-  target: number, years: number, annualReturnPct: number, currentCorpus: number,
+  target: number, years: number, annualReturnPct: number, grownCorpus: number,
 ): number {
-  const grownCorpus = accumulate({
-    lumpsum: currentCorpus, monthlySip: 0, stepUpPct: 0,
-    annualReturn: annualReturnPct, years, inflationPct: 0,
-  }).futureValue;
   const remaining = target - grownCorpus;
   if (remaining <= 0) return 0;
   // With zero (or negative) years there is no time for any monthly SIP to
@@ -97,19 +134,21 @@ export function computeRetirement(input: RetirementInput): RetirementResult {
   }
 
   const corpusNeededToday = corpusNeededAtRetirement / Math.pow(1 + infl, accumYears);
+  const grownCorpus = includedCorpusFutureValue(input.assetClasses, accumYears);
   const requiredMonthlySip = requiredSip(
-    corpusNeededAtRetirement, accumYears, input.preReturnPct, input.currentCorpus,
+    corpusNeededAtRetirement, accumYears, input.preReturnPct, grownCorpus,
   );
 
-  const projectedCorpusFromCurrentPlan = accumulate({
-    lumpsum: input.currentCorpus, monthlySip: input.currentMonthlyInvestment, stepUpPct: 0,
+  const investmentStreamFv = accumulate({
+    lumpsum: 0, monthlySip: input.currentMonthlyInvestment, stepUpPct: 0,
     annualReturn: input.preReturnPct, years: accumYears, inflationPct: 0,
   }).futureValue;
+  const projectedCorpusFromCurrentPlan = grownCorpus + investmentStreamFv;
 
   const gap = corpusNeededAtRetirement - projectedCorpusFromCurrentPlan;
   const extraSipToCloseGap = gap > 0
-    ? requiredSip(corpusNeededAtRetirement, accumYears, input.preReturnPct,
-        input.currentCorpus) - input.currentMonthlyInvestment
+    ? requiredSip(corpusNeededAtRetirement, accumYears, input.preReturnPct, grownCorpus)
+        - input.currentMonthlyInvestment
     : 0;
 
   return {
@@ -131,10 +170,25 @@ export function computeAccumulationSplit(
     return { required: [], surplus: null };
   }
 
-  const required = accumulate({
-    lumpsum: input.currentCorpus, monthlySip: requiredMonthlySip, stepUpPct: 0,
+  const sipSeries = accumulate({
+    lumpsum: 0, monthlySip: requiredMonthlySip, stepUpPct: 0,
     annualReturn: input.preReturnPct, years: accumYears, inflationPct: 0,
   }).series;
+
+  const assetSeriesList = input.assetClasses
+    .filter((a) => a.includeInRetirement)
+    .map((a) => accumulate({
+      lumpsum: a.amount, monthlySip: 0, stepUpPct: 0,
+      annualReturn: a.ratePct, years: accumYears, inflationPct: 0,
+    }).series);
+
+  // Every series above was built with the same `years`, so they're the same
+  // length with matching `month` at each index — safe to zip-sum by index.
+  const required: MonthlyPoint[] = sipSeries.map((point, idx) => ({
+    month: point.month,
+    invested: assetSeriesList.reduce((sum, s) => sum + s[idx].invested, point.invested),
+    value: assetSeriesList.reduce((sum, s) => sum + s[idx].value, point.value),
+  }));
 
   const surplusAmount = input.currentMonthlyInvestment - requiredMonthlySip;
   const surplus = surplusAmount > 0

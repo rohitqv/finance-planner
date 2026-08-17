@@ -1,12 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { computeRetirement, computeAccumulationSplit, requiredSip, type RetirementInput } from "@/lib/finance/retirement";
+import {
+  computeRetirement, computeAccumulationSplit, requiredSip,
+  includedCorpusFutureValue, includedCorpusAmount,
+  DEFAULT_ASSET_CLASSES, type RetirementInput, type AssetClass,
+} from "@/lib/finance/retirement";
 import { accumulate } from "@/lib/finance/accumulation";
+
+function corpusOf(amount: number, ratePct = 12): AssetClass[] {
+  return DEFAULT_ASSET_CLASSES.map((a) =>
+    a.key === "mutualFund" ? { ...a, amount, ratePct } : a,
+  );
+}
 
 const base: RetirementInput = {
   currentAge: 30, retirementAge: 55, lifespanAge: 85,
   currentMonthlyExpense: 50_000, inflationPct: 6,
   preReturnPct: 12, postReturnPct: 8,
-  phases: [], currentCorpus: 0, currentMonthlyInvestment: 0,
+  phases: [], assetClasses: DEFAULT_ASSET_CLASSES, currentMonthlyInvestment: 0,
 };
 
 describe("requiredSip", () => {
@@ -70,7 +80,7 @@ describe("computeRetirement — corpus depletion round-trip", () => {
 
 describe("computeRetirement — zero accumulation years", () => {
   it("currentAge === retirementAge yields no NaN and an explicit Infinity requiredMonthlySip when underfunded", () => {
-    const r = computeRetirement({ ...base, currentAge: 55, retirementAge: 55, currentCorpus: 0 });
+    const r = computeRetirement({ ...base, currentAge: 55, retirementAge: 55 });
     expect(Number.isNaN(r.requiredMonthlySip)).toBe(false);
     expect(Number.isNaN(r.extraSipToCloseGap)).toBe(false);
     // Zero years to accumulate and an unmet target: no SIP amount, however
@@ -79,7 +89,10 @@ describe("computeRetirement — zero accumulation years", () => {
   });
 
   it("currentAge === retirementAge with a corpus already covering the target yields 0, not Infinity", () => {
-    const r = computeRetirement({ ...base, currentAge: 55, retirementAge: 55, currentCorpus: 1_000_000_000 });
+    const r = computeRetirement({
+      ...base, currentAge: 55, retirementAge: 55,
+      assetClasses: corpusOf(1_000_000_000, base.preReturnPct),
+    });
     expect(Number.isNaN(r.requiredMonthlySip)).toBe(false);
     expect(r.requiredMonthlySip).toBe(0);
   });
@@ -98,7 +111,7 @@ describe("computeRetirement — phases", () => {
 
 describe("computeAccumulationSplit", () => {
   it("the Required series lands on the corpus target in its final year", () => {
-    const input = { ...base, currentCorpus: 2_000_000 };
+    const input = { ...base, assetClasses: corpusOf(2_000_000, base.preReturnPct) };
     const r = computeRetirement(input);
     const split = computeAccumulationSplit(input, r.requiredMonthlySip);
     const accumYears = input.retirementAge - input.currentAge;
@@ -139,5 +152,67 @@ describe("computeAccumulationSplit", () => {
     const split = computeAccumulationSplit(base, Infinity);
     expect(split.required).toEqual([]);
     expect(split.surplus).toBeNull();
+  });
+});
+
+describe("includedCorpusFutureValue", () => {
+  it("sums each included asset class grown at its own rate", () => {
+    const classes: AssetClass[] = [
+      { key: "mutualFund", label: "Mutual Fund", amount: 100_000, ratePct: 12, includeInRetirement: true },
+      { key: "epfo", label: "EPFO", amount: 200_000, ratePct: 8.25, includeInRetirement: true },
+    ];
+    const years = 10;
+    const expected =
+      accumulate({ lumpsum: 100_000, monthlySip: 0, stepUpPct: 0, annualReturn: 12, years, inflationPct: 0 }).futureValue +
+      accumulate({ lumpsum: 200_000, monthlySip: 0, stepUpPct: 0, annualReturn: 8.25, years, inflationPct: 0 }).futureValue;
+    expect(includedCorpusFutureValue(classes, years)).toBeCloseTo(expected, 6);
+  });
+
+  it("excludes asset classes with includeInRetirement: false entirely", () => {
+    const classes: AssetClass[] = [
+      { key: "mutualFund", label: "Mutual Fund", amount: 100_000, ratePct: 12, includeInRetirement: true },
+      { key: "realEstate", label: "Real Estate", amount: 5_000_000, ratePct: 8, includeInRetirement: false },
+    ];
+    const years = 10;
+    const withoutRealEstate = accumulate({
+      lumpsum: 100_000, monthlySip: 0, stepUpPct: 0, annualReturn: 12, years, inflationPct: 0,
+    }).futureValue;
+    expect(includedCorpusFutureValue(classes, years)).toBeCloseTo(withoutRealEstate, 6);
+  });
+});
+
+describe("includedCorpusAmount", () => {
+  it("sums today's amount for included classes only", () => {
+    const classes: AssetClass[] = [
+      { key: "mutualFund", label: "Mutual Fund", amount: 100_000, ratePct: 12, includeInRetirement: true },
+      { key: "gold", label: "Gold", amount: 50_000, ratePct: 8, includeInRetirement: false },
+      { key: "epfo", label: "EPFO", amount: 300_000, ratePct: 8.25, includeInRetirement: true },
+    ];
+    expect(includedCorpusAmount(classes)).toBe(400_000);
+  });
+});
+
+describe("computeRetirement — excluded asset classes are invisible to calculations", () => {
+  it("an excluded high-value asset class does not reduce requiredMonthlySip or raise projectedCorpusFromCurrentPlan", () => {
+    const excluded = computeRetirement({
+      ...base,
+      assetClasses: DEFAULT_ASSET_CLASSES.map((a) =>
+        a.key === "realEstate" ? { ...a, amount: 50_000_000, includeInRetirement: false } : a,
+      ),
+    });
+    const zero = computeRetirement(base);
+    expect(excluded.requiredMonthlySip).toBeCloseTo(zero.requiredMonthlySip, 6);
+    expect(excluded.projectedCorpusFromCurrentPlan).toBeCloseTo(zero.projectedCorpusFromCurrentPlan, 6);
+  });
+
+  it("the same asset class included instead of excluded does reduce requiredMonthlySip", () => {
+    const included = computeRetirement({
+      ...base,
+      assetClasses: DEFAULT_ASSET_CLASSES.map((a) =>
+        a.key === "realEstate" ? { ...a, amount: 50_000_000, includeInRetirement: true } : a,
+      ),
+    });
+    const zero = computeRetirement(base);
+    expect(included.requiredMonthlySip).toBeLessThan(zero.requiredMonthlySip);
   });
 });
