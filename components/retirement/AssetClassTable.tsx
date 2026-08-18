@@ -13,7 +13,7 @@ export default function AssetClassTable({
     <div>
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left text-gray-500">
+          <tr className="text-left text-gray-500 dark:text-gray-400">
             <th className="py-1">Asset class</th>
             <th className="py-1">Amount (₹)</th>
             <th className="py-1">Rate (%)</th>
@@ -22,13 +22,13 @@ export default function AssetClassTable({
         </thead>
         <tbody>
           {value.map((a) => (
-            <tr key={a.key} className="border-t">
+            <tr key={a.key} className="border-t dark:border-gray-700">
               <td className="py-1">{a.label}</td>
               <td className="py-1">
                 <input
                   aria-label={`${a.label} amount`}
                   type="number"
-                  className="w-full rounded border px-2 py-1"
+                  className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                   value={a.amount}
                   onChange={(e) => update(a.key, { amount: Number(e.target.value) })}
                 />
@@ -37,7 +37,7 @@ export default function AssetClassTable({
                 <input
                   aria-label={`${a.label} rate`}
                   type="number"
-                  className="w-full rounded border px-2 py-1"
+                  className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                   value={a.ratePct}
                   onChange={(e) => update(a.key, { ratePct: Number(e.target.value) })}
                 />
@@ -55,7 +55,7 @@ export default function AssetClassTable({
         </tbody>
       </table>
       {value.some((a) => a.key === "epfo") ? (
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           8.25% is the current government-declared EPF rate — edit if you
           expect it to change.
         </p>

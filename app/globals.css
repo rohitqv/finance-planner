@@ -1,8 +1,27 @@
 @import "tailwindcss";
 
+html {
+  scroll-behavior: smooth;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-border: #e5e7eb;
+  --chart-axis-text: #6b7280;
+  --chart-cursor: #94a3b8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+    --chart-tooltip-bg: #1f2937;
+    --chart-tooltip-border: #374151;
+    --chart-axis-text: #9ca3af;
+    --chart-cursor: #64748b;
+  }
 }
 
 @theme inline {

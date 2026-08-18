@@ -19,11 +19,11 @@ function SecondaryCard({ c }: { c: Card }) {
     <div
       className={
         c.signed
-          ? `rounded-xl p-4 shadow-sm ${c.positive ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`
-          : "rounded-xl border p-4 shadow-sm"
+          ? `rounded-xl p-4 shadow-sm ${c.positive ? "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300" : "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300"}`
+          : "rounded-xl border border-gray-200 p-4 shadow-sm dark:border-gray-700"
       }
     >
-      <div className={`text-xs uppercase ${c.signed ? "" : "text-gray-500"}`}>{c.label}</div>
+      <div className={`text-xs uppercase ${c.signed ? "" : "text-gray-500 dark:text-gray-400"}`}>{c.label}</div>
       <div className="text-lg font-semibold">
         {c.signed && (
           <span aria-hidden="true" className="mr-1">
@@ -42,12 +42,14 @@ function PrimaryCard({ c, action }: { c: Card; action?: ReactNode }) {
       className={
         c.signed
           ? `rounded-xl border-2 p-4 shadow-md ${
-              c.positive ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"
+              c.positive
+                ? "border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300"
+                : "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
             }`
-          : "rounded-xl border-2 border-gray-300 p-4 shadow-md"
+          : "rounded-xl border-2 border-gray-300 p-4 shadow-md dark:border-gray-600"
       }
     >
-      <div className={`text-xs uppercase ${c.signed ? "" : "text-gray-500"}`}>{c.label}</div>
+      <div className={`text-xs uppercase ${c.signed ? "" : "text-gray-500 dark:text-gray-400"}`}>{c.label}</div>
       <div className="mt-1 text-xl font-bold">
         {c.signed && (
           <span aria-hidden="true" className="mr-1">
@@ -72,7 +74,7 @@ export default function RetirementResults({
 }) {
   if (invalidLifespan) {
     return (
-      <div className="rounded-xl border border-red-400 bg-red-50 p-4 shadow-sm text-sm text-red-700">
+      <div className="rounded-xl border border-red-400 bg-red-50 p-4 shadow-sm text-sm text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-300">
         Lifespan must be greater than retirement age. The ₹0 corpus and SIP
         figures a plan like this would otherwise show are not real results —
         adjust the ages to see the actual numbers.
@@ -80,35 +82,43 @@ export default function RetirementResults({
     );
   }
 
-  const secondary: Card[] = [
+  const target: Card[] = [
     { label: "Corpus needed (at retirement)", value: formatINR(result.corpusNeededAtRetirement) },
     { label: "Corpus target (today's value)", value: formatINR(result.corpusNeededToday) },
+  ];
+  const requiredSip: Card = { label: "Required monthly SIP", value: formatMoneyOrInfinite(result.requiredMonthlySip) };
+  const gap: Card = {
+    label: result.gap >= 0 ? "Shortfall" : "Surplus",
+    value: formatINR(Math.abs(result.gap)),
+    signed: true,
+    positive: result.gap < 0,
+  };
+  const progress: Card[] = [
     { label: "Projected from current plan", value: formatINR(result.projectedCorpusFromCurrentPlan) },
     { label: "Extra SIP to close gap", value: formatMoneyOrInfinite(result.extraSipToCloseGap) },
   ];
-  const primary: Card[] = [
-    { label: "Required monthly SIP", value: formatMoneyOrInfinite(result.requiredMonthlySip) },
-    {
-      label: result.gap >= 0 ? "Shortfall" : "Surplus",
-      value: formatINR(Math.abs(result.gap)),
-      signed: true,
-      positive: result.gap < 0,
-    },
-  ];
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <SecondaryCard c={secondary[0]} />
-        <SecondaryCard c={secondary[1]} />
+    <div className="space-y-5">
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Your target</h3>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <SecondaryCard c={target[0]} />
+            <SecondaryCard c={target[1]} />
+          </div>
+          <PrimaryCard c={requiredSip} />
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <PrimaryCard c={primary[0]} />
-        <PrimaryCard c={primary[1]} action={action} />
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <SecondaryCard c={secondary[2]} />
-        <SecondaryCard c={secondary[3]} />
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Your progress</h3>
+        <div className="space-y-4">
+          <PrimaryCard c={gap} action={action} />
+          <div className="grid grid-cols-2 gap-4">
+            <SecondaryCard c={progress[0]} />
+            <SecondaryCard c={progress[1]} />
+          </div>
+        </div>
       </div>
     </div>
   );

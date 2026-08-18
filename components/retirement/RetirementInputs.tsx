@@ -51,9 +51,9 @@ export default function RetirementInputs({
       {sections.map((s) => (
         <section
           key={s.title}
-          className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+          className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900"
         >
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             {s.title}
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -71,8 +71,8 @@ export default function RetirementInputs({
         </section>
       ))}
 
-      <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+      <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
           Bucket strategy
         </h2>
         <label className="flex items-center gap-2 text-sm">
@@ -99,9 +99,9 @@ export default function RetirementInputs({
         ) : null}
       </section>
 
-      <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
         <div className="mb-3 flex items-center gap-1.5">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             Asset classes
           </h2>
           <InfoTip

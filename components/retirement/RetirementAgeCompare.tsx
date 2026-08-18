@@ -31,15 +31,15 @@ export default function RetirementAgeCompare({
   return (
     <table className="w-full text-sm">
       <thead>
-        <tr className="text-left text-gray-500">
+        <tr className="text-left text-gray-500 dark:text-gray-400">
           <th></th>
           {cols.map((c) => <th key={c.age}>{`Retire @ ${c.age}`}</th>)}
         </tr>
       </thead>
       <tbody>
         {rows.map((row) => (
-          <tr key={row.label} className="border-t">
-            <td className="py-1 text-gray-600">{row.label}</td>
+          <tr key={row.label} className="border-t dark:border-gray-700">
+            <td className="py-1 text-gray-600 dark:text-gray-300">{row.label}</td>
             {cols.map((c) => (
               <td key={c.age} title={c.invalid ? "Lifespan must be greater than retirement age" : undefined}>
                 {c.invalid ? "—" : row.get(c.result)}

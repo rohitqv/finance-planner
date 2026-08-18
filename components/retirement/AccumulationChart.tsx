@@ -5,12 +5,14 @@ import { formatINR, formatCompactINR } from "@/lib/finance/format";
 
 const TOOLTIP_STYLE = {
   borderRadius: 8,
-  border: "1px solid #e5e7eb",
+  border: "1px solid var(--chart-tooltip-border)",
+  background: "var(--chart-tooltip-bg)",
+  color: "var(--foreground)",
   fontSize: 12,
   boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",
 } as const;
 
-const AXIS_TICK = { fontSize: 12 };
+const AXIS_TICK = { fontSize: 12, fill: "var(--chart-axis-text)" };
 
 export default function AccumulationChart({
   required, surplus, startAge,
@@ -33,7 +35,7 @@ export default function AccumulationChart({
           <Tooltip
             formatter={(value) => formatINR(Number(value))}
             labelFormatter={(v) => `Age ${v}`}
-            cursor={{ stroke: "#94a3b8", strokeDasharray: "4 4" }}
+            cursor={{ stroke: "var(--chart-cursor)", strokeDasharray: "4 4" }}
             contentStyle={TOOLTIP_STYLE}
           />
           <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
