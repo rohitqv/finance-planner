@@ -30,11 +30,11 @@ export default function ResultCards({ result }: { result: CalculatorResult }) {
   return (
     <div className="space-y-4">
       {/* Hero metric — the headline number everything else supports. */}
-      <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-4 shadow-sm">
-        <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+      <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-4 shadow-sm dark:border-blue-800 dark:bg-blue-950">
+        <div className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
           Future Value
         </div>
-        <div className="mt-1 text-2xl font-bold text-gray-900">
+        <div className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-50">
           {formatINR(result.futureValue)}
         </div>
       </div>
@@ -44,11 +44,11 @@ export default function ResultCards({ result }: { result: CalculatorResult }) {
             key={c.label}
             className={
               c.signed
-                ? `rounded-xl p-4 shadow-sm ${c.positive ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`
-                : "rounded-xl border p-4 shadow-sm"
+                ? `rounded-xl p-4 shadow-sm ${c.positive ? "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300" : "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300"}`
+                : "rounded-xl border border-gray-200 p-4 shadow-sm dark:border-gray-700"
             }
           >
-            <div className={`text-xs uppercase ${c.signed ? "" : "text-gray-500"}`}>
+            <div className={`text-xs uppercase ${c.signed ? "" : "text-gray-500 dark:text-gray-400"}`}>
               {c.label}
             </div>
             <div className="text-lg font-semibold">

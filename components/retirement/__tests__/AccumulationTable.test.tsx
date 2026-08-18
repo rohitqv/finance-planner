@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import AccumulationTable from "@/components/retirement/AccumulationTable";
 import type { MonthlyPoint } from "@/lib/finance/types";
 
@@ -11,6 +11,7 @@ const required: MonthlyPoint[] = [
 describe("AccumulationTable", () => {
   it("shows only Required when there is no surplus", () => {
     render(<AccumulationTable required={required} surplus={null} startAge={30} />);
+    fireEvent.click(screen.getByText("Show year-by-year numbers"));
     expect(screen.getByText("31")).toBeInTheDocument();
     expect(screen.getByText("32")).toBeInTheDocument();
     expect(screen.queryByText(/surplus/i)).not.toBeInTheDocument();
@@ -22,6 +23,7 @@ describe("AccumulationTable", () => {
       { month: 24, invested: 400_000, value: 440_000 },
     ];
     render(<AccumulationTable required={required} surplus={surplus} startAge={30} />);
+    fireEvent.click(screen.getByText("Show year-by-year numbers"));
     expect(screen.getByText(/surplus/i)).toBeInTheDocument();
     expect(screen.getByText(/total/i)).toBeInTheDocument();
   });

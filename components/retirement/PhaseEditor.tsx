@@ -9,7 +9,7 @@ export default function PhaseEditor({
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">Life-phase expenses (optional)</span>
         <button
-          className="text-sm text-blue-600"
+          className="text-sm text-blue-600 dark:text-blue-400"
           onClick={() => onChange([...phases, { fromAge: 70, toAge: 85, monthlyExpenseToday: 30000 }])}
         >
           + Add phase
@@ -22,7 +22,7 @@ export default function PhaseEditor({
               key={k}
               aria-label={`phase ${idx} ${k}`}
               type="number"
-              className="w-full rounded border px-2 py-1 text-sm"
+              className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
               value={p[k]}
               onChange={(e) => {
                 const next = [...phases];
@@ -31,7 +31,7 @@ export default function PhaseEditor({
               }}
             />
           ))}
-          <button className="text-red-600" onClick={() => onChange(phases.filter((_, i) => i !== idx))}>×</button>
+          <button className="text-red-600 dark:text-red-400" onClick={() => onChange(phases.filter((_, i) => i !== idx))}>×</button>
         </div>
       ))}
     </div>

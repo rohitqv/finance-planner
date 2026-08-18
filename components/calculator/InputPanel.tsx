@@ -31,9 +31,9 @@ export default function InputPanel({
       {sections.map((s) => (
         <section
           key={s.title}
-          className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+          className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900"
         >
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             {s.title}
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

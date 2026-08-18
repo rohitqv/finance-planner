@@ -144,7 +144,7 @@ export default function BackupRestore() {
       <button
         type="button"
         aria-expanded={open}
-        className="flex items-center gap-2 rounded-full border border-gray-300 bg-white px-3.5 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:border-gray-400 hover:bg-gray-50"
+        className="flex items-center gap-2 rounded-full border border-gray-300 bg-white px-3.5 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:border-gray-400 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-gray-500 dark:hover:bg-gray-700"
         onClick={() => {
           refresh();
           setOpen((v) => !v);
@@ -152,7 +152,7 @@ export default function BackupRestore() {
       >
         <svg
           aria-hidden="true"
-          className="h-4 w-4 text-gray-500"
+          className="h-4 w-4 text-gray-500 dark:text-gray-400"
           viewBox="0 0 20 20"
           fill="currentColor"
         >
@@ -162,11 +162,11 @@ export default function BackupRestore() {
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-xl border border-gray-200 bg-white p-4 shadow-lg">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-xl border border-gray-200 bg-white p-4 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
             Export / import
           </p>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 text-gray-900 dark:text-gray-100">
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -197,13 +197,13 @@ export default function BackupRestore() {
               Export data
             </button>
             <button
-              className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
               onClick={() => fileInputRef.current?.click()}
             >
               Import data
             </button>
           </div>
-          {error ? <span className="mt-2 block text-xs text-red-600">{error}</span> : null}
+          {error ? <span className="mt-2 block text-xs text-red-600 dark:text-red-400">{error}</span> : null}
         </div>
       ) : null}
 

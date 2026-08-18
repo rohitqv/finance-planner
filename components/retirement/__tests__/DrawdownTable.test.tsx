@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import DrawdownTable from "@/components/retirement/DrawdownTable";
 import type { DrawdownRow, BucketDrawdownRow } from "@/lib/finance/retirement";
 
@@ -14,12 +14,14 @@ const bucketRows: BucketDrawdownRow[] = [
 describe("DrawdownTable", () => {
   it("shows a single 'Corpus balance' column for plain DrawdownRow[]", () => {
     render(<DrawdownTable rows={flatRows} />);
+    fireEvent.click(screen.getByText("Show year-by-year numbers"));
     expect(screen.getByText("Corpus balance")).toBeInTheDocument();
     expect(screen.queryByText("Safe bucket")).not.toBeInTheDocument();
   });
 
   it("shows Safe bucket / Growth bucket / Total columns for BucketDrawdownRow[]", () => {
     render(<DrawdownTable rows={bucketRows} />);
+    fireEvent.click(screen.getByText("Show year-by-year numbers"));
     expect(screen.getByText("Safe bucket")).toBeInTheDocument();
     expect(screen.getByText("Growth bucket")).toBeInTheDocument();
     expect(screen.getByText("Total")).toBeInTheDocument();

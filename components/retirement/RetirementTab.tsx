@@ -8,6 +8,7 @@ import DrawdownChart from "./DrawdownChart";
 import RetirementAgeCompare from "./RetirementAgeCompare";
 import AccumulationChart from "./AccumulationChart";
 import AccumulationTable from "./AccumulationTable";
+import SectionNav from "./SectionNav";
 import { computeRetirement, computeAccumulationSplit, includedCorpusAmount, DEFAULT_ASSET_CLASSES, type RetirementInput } from "@/lib/finance/retirement";
 import { loadPlan, savePlan } from "@/store/retirementPlan";
 import InfoTip from "@/components/InfoTip";
@@ -61,7 +62,7 @@ export default function RetirementTab({
         <RetirementInputs value={input} onChange={setInput} />
         <PhaseEditor phases={input.phases} onChange={(phases) => setInput({ ...input, phases })} />
       </div>
-      <div className="space-y-4">
+      <div id="results" className="scroll-mt-16 space-y-4">
         <RetirementResults
           result={result}
           invalidLifespan={invalidLifespan}
@@ -99,8 +100,16 @@ export default function RetirementTab({
         <DrawdownChart rows={result.drawdown} />
       </div>
       <div className="md:col-span-2">
+        <SectionNav
+          items={[
+            { id: "results", label: "Results" },
+            ...(split.required.length > 0 ? [{ id: "growth", label: "Growth to retirement" }] : []),
+            { id: "yearly", label: "Year-by-year" },
+            { id: "compare", label: "Compare ages" },
+          ]}
+        />
         {split.required.length > 0 ? (
-          <div className="mb-6">
+          <div id="growth" className="mb-6 scroll-mt-16">
             <h3 className="mb-2 font-semibold">
               Growing to retirement{split.surplus ? " — required vs. surplus" : ""}
             </h3>
@@ -108,9 +117,11 @@ export default function RetirementTab({
             <AccumulationTable required={split.required} surplus={split.surplus} startAge={input.currentAge} />
           </div>
         ) : null}
-        <h3 className="mb-2 font-semibold">Year-by-year drawdown</h3>
-        <DrawdownTable rows={result.drawdown} />
-        <div className="mt-6">
+        <div id="yearly" className="scroll-mt-16">
+          <h3 className="mb-2 font-semibold">Year-by-year drawdown</h3>
+          <DrawdownTable rows={result.drawdown} />
+        </div>
+        <div id="compare" className="mt-6 scroll-mt-16">
           <h3 className="mb-2 font-semibold">Compare retirement ages</h3>
           <RetirementAgeCompare base={input} ages={[input.retirementAge - 5, input.retirementAge, input.retirementAge + 5]} />
         </div>

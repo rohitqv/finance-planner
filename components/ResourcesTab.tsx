@@ -23,10 +23,10 @@ export default function ResourcesTab() {
       <ul className="space-y-3">
         {LINKS.map((l) => (
           <li key={l.href}>
-            <a href={l.href} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+            <a href={l.href} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline dark:text-blue-400">
               {l.title}
             </a>
-            <p className="text-sm text-gray-500">{l.note}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{l.note}</p>
           </li>
         ))}
       </ul>
