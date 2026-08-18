@@ -31,6 +31,10 @@ export type RetirementInput = {
   phases: ExpensePhase[];
   assetClasses: AssetClass[];
   currentMonthlyInvestment: number;
+  useBucketStrategy: boolean;
+  bucketYears: number;
+  safeBucketRatePct: number;
+  growthBucketRatePct: number;
 };
 
 // Future value at `years` from now of every asset class with

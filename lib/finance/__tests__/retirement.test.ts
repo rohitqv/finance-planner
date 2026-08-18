@@ -17,6 +17,7 @@ const base: RetirementInput = {
   currentMonthlyExpense: 50_000, inflationPct: 6,
   preReturnPct: 12, postReturnPct: 8,
   phases: [], assetClasses: DEFAULT_ASSET_CLASSES, currentMonthlyInvestment: 0,
+  useBucketStrategy: false, bucketYears: 5, safeBucketRatePct: 7, growthBucketRatePct: 11,
 };
 
 describe("requiredSip", () => {
