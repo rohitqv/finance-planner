@@ -3,6 +3,7 @@ import { useState } from "react";
 import Tabs from "@/components/Tabs";
 import CalculatorTab from "@/components/calculator/CalculatorTab";
 import RetirementTab from "@/components/retirement/RetirementTab";
+import ResourcesTab from "@/components/ResourcesTab";
 import BackupRestore from "@/components/BackupRestore";
 import type { CalculatorInput } from "@/lib/finance/types";
 
@@ -14,10 +15,10 @@ export default function Page() {
     <main className="mx-auto max-w-5xl p-6">
       <h1 className="mb-4 text-2xl font-bold">Finance Planner</h1>
       <BackupRestore />
-      <Tabs tabs={["Investment Calculator", "Retirement Planner"]} active={active} onSelect={setActive} />
+      <Tabs tabs={["Investment Calculator", "Retirement Planner", "Resources"]} active={active} onSelect={setActive} />
       {active === 0 ? (
         <CalculatorTab initial={handoff} />
-      ) : (
+      ) : active === 1 ? (
         <RetirementTab
           onHandoff={(p) => {
             setHandoff({
@@ -31,6 +32,8 @@ export default function Page() {
             setActive(0);
           }}
         />
+      ) : (
+        <ResourcesTab />
       )}
     </main>
   );
