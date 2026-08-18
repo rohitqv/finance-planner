@@ -31,6 +31,10 @@ export type RetirementInput = {
   phases: ExpensePhase[];
   assetClasses: AssetClass[];
   currentMonthlyInvestment: number;
+  useBucketStrategy: boolean;
+  bucketYears: number;
+  safeBucketRatePct: number;
+  growthBucketRatePct: number;
 };
 
 // Future value at `years` from now of every asset class with
@@ -67,13 +71,150 @@ export type RetirementResult = {
   projectedCorpusFromCurrentPlan: number;
   gap: number;
   extraSipToCloseGap: number;
-  drawdown: DrawdownRow[];
+  drawdown: DrawdownRow[] | BucketDrawdownRow[];
 };
 
 export function annualExpenseTodayForAge(input: RetirementInput, age: number): number {
   const phase = input.phases.find((p) => age >= p.fromAge && age <= p.toAge);
   const monthly = phase ? phase.monthlyExpenseToday : input.currentMonthlyExpense;
   return monthly * 12;
+}
+
+export type BucketDrawdownRow = DrawdownRow & { safeBalance: number; growthBalance: number };
+
+export function isBucketDrawdown(
+  rows: DrawdownRow[] | BucketDrawdownRow[],
+): rows is BucketDrawdownRow[] {
+  return rows.length > 0 && "safeBalance" in rows[0];
+}
+
+type BucketState = { safeBalance: number; growthBalance: number };
+
+function bucketYearlyExpense(input: RetirementInput, age: number, infl: number): number {
+  return annualExpenseTodayForAge(input, age) * Math.pow(1 + infl, age - input.currentAge);
+}
+
+// Sum of the inflated expenses for the `bucketYears` years *after* `age`,
+// capped at however many years remain until lifespanAge. This is the
+// safe bucket's target size once this year's withdrawal is done.
+function bucketRefillTarget(input: RetirementInput, age: number, infl: number): number {
+  const remainingYears = Math.max(0, input.lifespanAge - age);
+  const span = Math.min(input.bucketYears, remainingYears);
+  let target = 0;
+  for (let k = 1; k <= span; k++) target += bucketYearlyExpense(input, age + k, infl);
+  return target;
+}
+
+// One year of bucket-strategy drawdown: withdraw this year's expense from
+// the safe bucket, grow both buckets at their own rate, then rebalance the
+// safe bucket back to `bucketRefillTarget`, moving the difference to/from
+// the growth bucket. A transfer *into* the safe bucket is capped at the
+// growth bucket's balance (money can't come from nowhere) and both balances
+// floor at 0.
+function stepBucketYear(
+  input: RetirementInput, state: BucketState, age: number, infl: number,
+): BucketState {
+  const expense = bucketYearlyExpense(input, age, infl);
+  let safeBalance = (state.safeBalance - expense) * (1 + input.safeBucketRatePct / 100);
+  let growthBalance = state.growthBalance * (1 + input.growthBucketRatePct / 100);
+
+  const target = bucketRefillTarget(input, age, infl);
+  const desiredTransfer = target - safeBalance;
+  const transfer = desiredTransfer > 0
+    ? Math.min(desiredTransfer, growthBalance)
+    : desiredTransfer;
+  safeBalance += transfer;
+  growthBalance -= transfer;
+
+  safeBalance = Math.max(0, safeBalance);
+  growthBalance = Math.max(0, growthBalance);
+  return { safeBalance, growthBalance };
+}
+
+// Split the starting corpus at retirement: `bucketYears` worth of expense
+// (starting with this year's) goes to the safe bucket, the rest to growth.
+function initialBucketSplit(
+  input: RetirementInput, startingCorpus: number, infl: number,
+): BucketState {
+  const span = Math.min(input.bucketYears, input.lifespanAge - input.retirementAge + 1);
+  let initialTarget = 0;
+  for (let k = 0; k < span; k++) {
+    initialTarget += bucketYearlyExpense(input, input.retirementAge + k, infl);
+  }
+  const safeBalance = Math.min(startingCorpus, initialTarget);
+  const growthBalanceRaw = startingCorpus - initialTarget;
+  return { safeBalance, growthBalance: Math.max(0, growthBalanceRaw) };
+}
+
+type BucketYearRow = {
+  age: number; yearsFromNow: number; annualExpenseToday: number; annualExpenseInflated: number;
+  safeBalance: number; growthBalance: number;
+};
+
+function runBucketYears(input: RetirementInput, startingCorpus: number): BucketYearRow[] {
+  const infl = input.inflationPct / 100;
+  let state = initialBucketSplit(input, startingCorpus, infl);
+  const rows: BucketYearRow[] = [];
+  for (let age = input.retirementAge; age <= input.lifespanAge; age++) {
+    state = stepBucketYear(input, state, age, infl);
+    rows.push({
+      age, yearsFromNow: age - input.currentAge,
+      annualExpenseToday: annualExpenseTodayForAge(input, age),
+      annualExpenseInflated: bucketYearlyExpense(input, age, infl),
+      safeBalance: state.safeBalance, growthBalance: state.growthBalance,
+    });
+  }
+  return rows;
+}
+
+export function simulateBucketDrawdown(input: RetirementInput, startingCorpus: number): BucketDrawdownRow[] {
+  const nowYear = new Date().getFullYear();
+  return runBucketYears(input, startingCorpus).map((r) => ({
+    age: r.age, year: nowYear + r.yearsFromNow, yearsFromNow: r.yearsFromNow,
+    annualExpenseToday: r.annualExpenseToday, annualExpenseInflated: r.annualExpenseInflated,
+    corpusBalance: r.safeBalance + r.growthBalance,
+    safeBalance: r.safeBalance, growthBalance: r.growthBalance,
+  }));
+}
+
+// Bracket-and-bisect on the starting corpus (same technique as the XIRR
+// solver in lib/finance/returns.ts, but the search variable here is a
+// rupee amount, not a rate): find the starting corpus whose ending balance
+// at lifespanAge is exactly 0. Display-mode ending balance floors at 0 once
+// a corpus is insufficient, so <= 0 (not < 0) is the 'still insufficient'
+// test; because every step is built from min/max (continuous, monotonic
+// non-decreasing functions), the balance is continuous and monotonic
+// non-decreasing in the starting corpus, so this still correctly brackets
+// the point where it first becomes positive.
+export function solveBucketCorpusNeeded(input: RetirementInput): number {
+  if (input.lifespanAge < input.retirementAge) return 0;
+
+  const endingBalance = (corpus: number): number => {
+    const rows = runBucketYears(input, corpus);
+    const last = rows[rows.length - 1];
+    return last.safeBalance + last.growthBalance;
+  };
+
+  let lo = 0;
+  let hi = Math.max(1, bucketYearlyExpense(input, input.retirementAge, input.inflationPct / 100));
+  let bracketed = false;
+  for (let iter = 0; iter < 100; iter++) {
+    if (endingBalance(hi) > 0) { bracketed = true; break; }
+    hi *= 2;
+  }
+  // No finite corpus reached a positive ending balance within a safe,
+  // bounded search range (e.g. a bucket rate at or below -100%, which
+  // collapses growth to 0 or negative every year) — an explicit failure
+  // signal, matching xirrFromCashflows's NaN sentinel in returns.ts, not
+  // a plausible-looking but meaningless number.
+  if (!bracketed) return NaN;
+
+  for (let iter = 0; iter < 100; iter++) {
+    if (hi - lo < 1e-6) break;
+    const mid = (lo + hi) / 2;
+    if (endingBalance(mid) <= 0) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
 }
 
 // Solve flat month-end SIP so that grownCorpus + SIP stream reaches target.
@@ -134,10 +275,17 @@ export function computeRetirement(input: RetirementInput): RetirementResult {
     });
   }
 
-  const corpusNeededToday = corpusNeededAtRetirement / Math.pow(1 + infl, accumYears);
+  let finalCorpusNeededAtRetirement = corpusNeededAtRetirement;
+  let finalDrawdown: DrawdownRow[] | BucketDrawdownRow[] = drawdown;
+  if (input.useBucketStrategy) {
+    finalCorpusNeededAtRetirement = solveBucketCorpusNeeded(input);
+    finalDrawdown = simulateBucketDrawdown(input, finalCorpusNeededAtRetirement);
+  }
+
+  const corpusNeededToday = finalCorpusNeededAtRetirement / Math.pow(1 + infl, accumYears);
   const grownCorpus = includedCorpusFutureValue(input.assetClasses, accumYears);
   const requiredMonthlySip = requiredSip(
-    corpusNeededAtRetirement, accumYears, input.preReturnPct, grownCorpus,
+    finalCorpusNeededAtRetirement, accumYears, input.preReturnPct, grownCorpus,
   );
 
   const investmentStreamFv = accumulate({
@@ -146,20 +294,20 @@ export function computeRetirement(input: RetirementInput): RetirementResult {
   }).futureValue;
   const projectedCorpusFromCurrentPlan = grownCorpus + investmentStreamFv;
 
-  const gap = corpusNeededAtRetirement - projectedCorpusFromCurrentPlan;
+  const gap = finalCorpusNeededAtRetirement - projectedCorpusFromCurrentPlan;
   const extraSipToCloseGap = gap > 0
-    ? requiredSip(corpusNeededAtRetirement, accumYears, input.preReturnPct, grownCorpus)
+    ? requiredSip(finalCorpusNeededAtRetirement, accumYears, input.preReturnPct, grownCorpus)
         - input.currentMonthlyInvestment
     : 0;
 
   return {
-    corpusNeededAtRetirement,
+    corpusNeededAtRetirement: finalCorpusNeededAtRetirement,
     corpusNeededToday,
     requiredMonthlySip,
     projectedCorpusFromCurrentPlan,
     gap,
     extraSipToCloseGap: Math.max(0, extraSipToCloseGap),
-    drawdown,
+    drawdown: finalDrawdown,
   };
 }
 

@@ -38,10 +38,19 @@ export function loadPlan(): RetirementInput | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as LegacyPlan | RetirementInput;
-    if (!("assetClasses" in parsed) || parsed.assetClasses == null) {
-      return migrateLegacyPlan(parsed as LegacyPlan);
-    }
-    return { ...parsed, assetClasses: reconcileAssetClasses(parsed.assetClasses) } as RetirementInput;
+    const migrated = !("assetClasses" in parsed) || parsed.assetClasses == null
+      ? migrateLegacyPlan(parsed as LegacyPlan)
+      : { ...parsed, assetClasses: reconcileAssetClasses(parsed.assetClasses) } as RetirementInput;
+    // Plans saved before the bucket-strategy feature shipped won't have
+    // these fields at all — fill them with the documented defaults rather
+    // than leaving them undefined.
+    return {
+      ...migrated,
+      useBucketStrategy: migrated.useBucketStrategy ?? false,
+      bucketYears: migrated.bucketYears ?? 5,
+      safeBucketRatePct: migrated.safeBucketRatePct ?? 7,
+      growthBucketRatePct: migrated.growthBucketRatePct ?? 11,
+    };
   } catch {
     return null;
   }

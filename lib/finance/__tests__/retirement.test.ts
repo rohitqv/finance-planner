@@ -18,6 +18,7 @@ const base: RetirementInput = {
   currentMonthlyExpense: 50_000, inflationPct: 6,
   preReturnPct: 12, postReturnPct: 8,
   phases: [], assetClasses: DEFAULT_ASSET_CLASSES, currentMonthlyInvestment: 0,
+  useBucketStrategy: false, bucketYears: 5, safeBucketRatePct: 7, growthBucketRatePct: 11,
 };
 
 describe("requiredSip", () => {
@@ -253,6 +254,65 @@ describe("computeRetirement — excluded asset classes are invisible to calculat
   });
 });
 
+describe("simulateBucketDrawdown", () => {
+  // A small, hand-computable scenario: 3 years of retirement (60, 61, 62),
+  // flat (uninflated) expense so every year withdraws exactly 12,00,000,
+  // round rates so the arithmetic is easy to verify by hand.
+  const bucketBase: RetirementInput = {
+    ...base,
+    currentAge: 60, retirementAge: 60, lifespanAge: 62,
+    currentMonthlyExpense: 100_000, inflationPct: 0,
+    useBucketStrategy: true, bucketYears: 2, safeBucketRatePct: 10, growthBucketRatePct: 20,
+  };
+
+  it("withdraws from the safe bucket, grows both buckets, and refills the safe bucket from growth (hand-computed)", () => {
+    // Initial split of 50,00,000: safe = 2 years' expense = 24,00,000, growth = 26,00,000.
+    // Year 60: safe (24L-12L)*1.10=13.2L, growth 26L*1.20=31.2L, refill target
+    //   (next 2 yrs) = 24L, transfer 10.8L growth->safe => safe 24L, growth 20.4L.
+    // Year 61: safe (24L-12L)*1.10=13.2L, growth 20.4L*1.20=24.48L, refill
+    //   target (next 1 yr) = 12L, transfer -1.2L (safe->growth) => safe 12L, growth 25.68L.
+    // Year 62 (last): safe (12L-12L)*1.10=0, growth 25.68L*1.20=30.816L, refill
+    //   target (0 yrs left) = 0, no transfer => safe 0, growth 30.816L.
+    const rows = simulateBucketDrawdown(bucketBase, 5_000_000);
+    expect(rows).toHaveLength(3);
+
+    expect(rows[0].age).toBe(60);
+    expect(rows[0].safeBalance).toBeCloseTo(2_400_000, 0);
+    expect(rows[0].growthBalance).toBeCloseTo(2_040_000, 0);
+
+    expect(rows[1].age).toBe(61);
+    expect(rows[1].safeBalance).toBeCloseTo(1_200_000, 0);
+    expect(rows[1].growthBalance).toBeCloseTo(2_568_000, 0);
+
+    expect(rows[2].age).toBe(62);
+    expect(rows[2].safeBalance).toBeCloseTo(0, 0);
+    expect(rows[2].growthBalance).toBeCloseTo(3_081_600, 0);
+    expect(rows[2].corpusBalance).toBeCloseTo(3_081_600, 0);
+  });
+
+  it("floors both buckets at 0 when the starting corpus can't cover expenses, instead of going negative", () => {
+    const rows = simulateBucketDrawdown(bucketBase, 0);
+    for (const row of rows) {
+      expect(row.safeBalance).toBeGreaterThanOrEqual(0);
+      expect(row.growthBalance).toBeGreaterThanOrEqual(0);
+    }
+  });
+});
+
+describe("isBucketDrawdown", () => {
+  it("distinguishes bucket rows from flat-rate rows", () => {
+    const bucketBase: RetirementInput = {
+      ...base,
+      currentAge: 60, retirementAge: 60, lifespanAge: 62,
+      currentMonthlyExpense: 100_000, inflationPct: 0,
+      useBucketStrategy: true, bucketYears: 2, safeBucketRatePct: 10, growthBucketRatePct: 20,
+    };
+    expect(isBucketDrawdown(simulateBucketDrawdown(bucketBase, 5_000_000))).toBe(true);
+    expect(isBucketDrawdown(computeRetirement(base).drawdown)).toBe(false);
+    expect(isBucketDrawdown([])).toBe(false);
+  });
+});
+
 describe("solveBucketCorpusNeeded", () => {
   const bucketBase: RetirementInput = {
     ...base,
@@ -286,5 +346,52 @@ describe("solveBucketCorpusNeeded", () => {
     expect(corpus).toBeGreaterThan(0);
     const rows = simulateBucketDrawdown(longHorizon, corpus);
     expect(rows[rows.length - 1].corpusBalance).toBeCloseTo(0, -2); // within ~50 rupees
+  });
+
+  it("with bucket rates at or below -100% (no corpus can ever reach a positive ending balance), is explicitly NaN, never an astronomical number", () => {
+    // A rate at or below -100% collapses growth to 0 or negative every
+    // year, so the doubling search never finds a `hi` with a positive
+    // ending balance. This must be an intentional, guarded NaN — matching
+    // xirrFromCashflows's failure sentinel in returns.ts — not a
+    // plausible-looking but meaningless ~expense * 2^100 "corpus".
+    const unreachable: RetirementInput = {
+      ...bucketBase, safeBucketRatePct: -100, growthBucketRatePct: -100,
+    };
+    const corpus = solveBucketCorpusNeeded(unreachable);
+    expect(Number.isNaN(corpus)).toBe(true);
+  });
+});
+
+describe("computeRetirement — bucket strategy mode", () => {
+  const bucketInput: RetirementInput = {
+    ...base,
+    useBucketStrategy: true, bucketYears: 5, safeBucketRatePct: 7, growthBucketRatePct: 11,
+  };
+
+  it("returns BucketDrawdownRow[] (with safe/growth balances) when useBucketStrategy is true", () => {
+    const r = computeRetirement(bucketInput);
+    expect(isBucketDrawdown(r.drawdown)).toBe(true);
+  });
+
+  it("still returns plain DrawdownRow[] (no safeBalance) when useBucketStrategy is false", () => {
+    const r = computeRetirement(base);
+    expect(isBucketDrawdown(r.drawdown)).toBe(false);
+  });
+
+  it("depletes to ~0 at lifespanAge in bucket mode, mirroring the flat-rate round-trip test above", () => {
+    const r = computeRetirement(bucketInput);
+    const last = r.drawdown[r.drawdown.length - 1];
+    expect(last.corpusBalance).toBeCloseTo(0, -2); // within ~50 rupees
+  });
+
+  it("requiredMonthlySip, invested alongside the projected corpus, reaches corpusNeededAtRetirement", () => {
+    const r = computeRetirement(bucketInput);
+    const accumYears = bucketInput.retirementAge - bucketInput.currentAge;
+    const grownCorpus = includedCorpusFutureValue(bucketInput.assetClasses, accumYears);
+    const sipFv = accumulate({
+      lumpsum: 0, monthlySip: r.requiredMonthlySip, stepUpPct: 0,
+      annualReturn: bucketInput.preReturnPct, years: accumYears, inflationPct: 0,
+    }).futureValue;
+    expect(grownCorpus + sipFv).toBeCloseTo(r.corpusNeededAtRetirement, -1);
   });
 });

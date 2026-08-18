@@ -10,6 +10,7 @@ const plan: RetirementInput = {
   currentAge: 30, retirementAge: 55, lifespanAge: 85,
   currentMonthlyExpense: 50000, inflationPct: 6, preReturnPct: 12, postReturnPct: 8,
   phases: [], assetClasses: DEFAULT_ASSET_CLASSES, currentMonthlyInvestment: 0,
+  useBucketStrategy: false, bucketYears: 5, safeBucketRatePct: 7, growthBucketRatePct: 11,
 };
 
 describe("retirement plan store", () => {
@@ -115,5 +116,33 @@ describe("retirement plan store", () => {
     const fixedDeposit = loaded!.assetClasses.find((a) => a.key === "fixedDeposit")!;
     expect(fixedDeposit.amount).toBe(0);
     expect(fixedDeposit.includeInRetirement).toBe(true);
+  });
+
+  it("backfills bucket-strategy defaults for a plan saved before that feature shipped", () => {
+    const preFeaturePlan = {
+      currentAge: 30, retirementAge: 55, lifespanAge: 85,
+      currentMonthlyExpense: 50000, inflationPct: 6, preReturnPct: 12, postReturnPct: 8,
+      phases: [], assetClasses: DEFAULT_ASSET_CLASSES, currentMonthlyInvestment: 0,
+    };
+    localStorage.setItem(KEY, JSON.stringify(preFeaturePlan));
+
+    const loaded = loadPlan();
+    expect(loaded!.useBucketStrategy).toBe(false);
+    expect(loaded!.bucketYears).toBe(5);
+    expect(loaded!.safeBucketRatePct).toBe(7);
+    expect(loaded!.growthBucketRatePct).toBe(11);
+  });
+
+  it("keeps a saved bucket-strategy setting rather than overwriting it with the default", () => {
+    const planWithBuckets = {
+      ...plan, useBucketStrategy: true, bucketYears: 3, safeBucketRatePct: 6, growthBucketRatePct: 12,
+    };
+    localStorage.setItem(KEY, JSON.stringify(planWithBuckets));
+
+    const loaded = loadPlan();
+    expect(loaded!.useBucketStrategy).toBe(true);
+    expect(loaded!.bucketYears).toBe(3);
+    expect(loaded!.safeBucketRatePct).toBe(6);
+    expect(loaded!.growthBucketRatePct).toBe(12);
   });
 });
