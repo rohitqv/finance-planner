@@ -26,6 +26,9 @@ export default function DrawdownTable({ rows }: { rows: DrawdownRow[] | BucketDr
             ))}
           </tbody>
         </table>
+        <p className="mt-1 text-xs text-gray-500">
+          Safe, Growth, and Total figures are end-of-year balances, after that year&apos;s growth has been applied.
+        </p>
       </div>
     );
   }

@@ -347,6 +347,19 @@ describe("solveBucketCorpusNeeded", () => {
     const rows = simulateBucketDrawdown(longHorizon, corpus);
     expect(rows[rows.length - 1].corpusBalance).toBeCloseTo(0, -2); // within ~50 rupees
   });
+
+  it("with bucket rates at or below -100% (no corpus can ever reach a positive ending balance), is explicitly NaN, never an astronomical number", () => {
+    // A rate at or below -100% collapses growth to 0 or negative every
+    // year, so the doubling search never finds a `hi` with a positive
+    // ending balance. This must be an intentional, guarded NaN — matching
+    // xirrFromCashflows's failure sentinel in returns.ts — not a
+    // plausible-looking but meaningless ~expense * 2^100 "corpus".
+    const unreachable: RetirementInput = {
+      ...bucketBase, safeBucketRatePct: -100, growthBucketRatePct: -100,
+    };
+    const corpus = solveBucketCorpusNeeded(unreachable);
+    expect(Number.isNaN(corpus)).toBe(true);
+  });
 });
 
 describe("computeRetirement — bucket strategy mode", () => {

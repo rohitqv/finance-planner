@@ -197,7 +197,17 @@ export function solveBucketCorpusNeeded(input: RetirementInput): number {
 
   let lo = 0;
   let hi = Math.max(1, bucketYearlyExpense(input, input.retirementAge, input.inflationPct / 100));
-  for (let iter = 0; iter < 100 && endingBalance(hi) <= 0; iter++) hi *= 2;
+  let bracketed = false;
+  for (let iter = 0; iter < 100; iter++) {
+    if (endingBalance(hi) > 0) { bracketed = true; break; }
+    hi *= 2;
+  }
+  // No finite corpus reached a positive ending balance within a safe,
+  // bounded search range (e.g. a bucket rate at or below -100%, which
+  // collapses growth to 0 or negative every year) — an explicit failure
+  // signal, matching xirrFromCashflows's NaN sentinel in returns.ts, not
+  // a plausible-looking but meaningless number.
+  if (!bracketed) return NaN;
 
   for (let iter = 0; iter < 100; iter++) {
     if (hi - lo < 1e-6) break;

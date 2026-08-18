@@ -45,8 +45,11 @@ export function loadPlan(): RetirementInput | null {
     // these fields at all — fill them with the documented defaults rather
     // than leaving them undefined.
     return {
-      useBucketStrategy: false, bucketYears: 5, safeBucketRatePct: 7, growthBucketRatePct: 11,
       ...migrated,
+      useBucketStrategy: migrated.useBucketStrategy ?? false,
+      bucketYears: migrated.bucketYears ?? 5,
+      safeBucketRatePct: migrated.safeBucketRatePct ?? 7,
+      growthBucketRatePct: migrated.growthBucketRatePct ?? 11,
     };
   } catch {
     return null;
