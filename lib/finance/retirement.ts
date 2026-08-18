@@ -80,6 +80,109 @@ export function annualExpenseTodayForAge(input: RetirementInput, age: number): n
   return monthly * 12;
 }
 
+export type BucketDrawdownRow = DrawdownRow & { safeBalance: number; growthBalance: number };
+
+export function isBucketDrawdown(
+  rows: DrawdownRow[] | BucketDrawdownRow[],
+): rows is BucketDrawdownRow[] {
+  return rows.length > 0 && "safeBalance" in rows[0];
+}
+
+type BucketState = { safeBalance: number; growthBalance: number };
+type BucketMode = "raw" | "display";
+
+function bucketYearlyExpense(input: RetirementInput, age: number, infl: number): number {
+  return annualExpenseTodayForAge(input, age) * Math.pow(1 + infl, age - input.currentAge);
+}
+
+// Sum of the inflated expenses for the `bucketYears` years *after* `age`,
+// capped at however many years remain until lifespanAge. This is the
+// safe bucket's target size once this year's withdrawal is done.
+function bucketRefillTarget(input: RetirementInput, age: number, infl: number): number {
+  const remainingYears = Math.max(0, input.lifespanAge - age);
+  const span = Math.min(input.bucketYears, remainingYears);
+  let target = 0;
+  for (let k = 1; k <= span; k++) target += bucketYearlyExpense(input, age + k, infl);
+  return target;
+}
+
+// One year of bucket-strategy drawdown: withdraw this year's expense from
+// the safe bucket, grow both buckets at their own rate, then rebalance the
+// safe bucket back to `bucketRefillTarget`, moving the difference to/from
+// the growth bucket. In "display" mode, a transfer *into* the safe bucket
+// is capped at the growth bucket's balance (money can't come from
+// nowhere) and both balances floor at 0 for the row shown to the user; in
+// "raw" mode (used only by solveBucketCorpusNeeded) neither the cap nor
+// the floor is applied, so the ending balance stays a smooth, monotonic
+// function of the starting corpus that bisection can search over.
+function stepBucketYear(
+  input: RetirementInput, state: BucketState, age: number, infl: number, mode: BucketMode,
+): BucketState {
+  const expense = bucketYearlyExpense(input, age, infl);
+  let safeBalance = (state.safeBalance - expense) * (1 + input.safeBucketRatePct / 100);
+  let growthBalance = state.growthBalance * (1 + input.growthBucketRatePct / 100);
+
+  const target = bucketRefillTarget(input, age, infl);
+  const desiredTransfer = target - safeBalance;
+  const transfer = mode === "display" && desiredTransfer > 0
+    ? Math.min(desiredTransfer, growthBalance)
+    : desiredTransfer;
+  safeBalance += transfer;
+  growthBalance -= transfer;
+
+  if (mode === "display") {
+    safeBalance = Math.max(0, safeBalance);
+    growthBalance = Math.max(0, growthBalance);
+  }
+  return { safeBalance, growthBalance };
+}
+
+// Split the starting corpus at retirement: `bucketYears` worth of expense
+// (starting with this year's) goes to the safe bucket, the rest to growth.
+function initialBucketSplit(
+  input: RetirementInput, startingCorpus: number, infl: number, mode: BucketMode,
+): BucketState {
+  const span = Math.min(input.bucketYears, input.lifespanAge - input.retirementAge + 1);
+  let initialTarget = 0;
+  for (let k = 0; k < span; k++) {
+    initialTarget += bucketYearlyExpense(input, input.retirementAge + k, infl);
+  }
+  const safeBalance = Math.min(startingCorpus, initialTarget);
+  const growthBalanceRaw = startingCorpus - initialTarget;
+  return { safeBalance, growthBalance: mode === "display" ? Math.max(0, growthBalanceRaw) : growthBalanceRaw };
+}
+
+type BucketYearRow = {
+  age: number; yearsFromNow: number; annualExpenseToday: number; annualExpenseInflated: number;
+  safeBalance: number; growthBalance: number;
+};
+
+function runBucketYears(input: RetirementInput, startingCorpus: number, mode: BucketMode): BucketYearRow[] {
+  const infl = input.inflationPct / 100;
+  let state = initialBucketSplit(input, startingCorpus, infl, mode);
+  const rows: BucketYearRow[] = [];
+  for (let age = input.retirementAge; age <= input.lifespanAge; age++) {
+    state = stepBucketYear(input, state, age, infl, mode);
+    rows.push({
+      age, yearsFromNow: age - input.currentAge,
+      annualExpenseToday: annualExpenseTodayForAge(input, age),
+      annualExpenseInflated: bucketYearlyExpense(input, age, infl),
+      safeBalance: state.safeBalance, growthBalance: state.growthBalance,
+    });
+  }
+  return rows;
+}
+
+export function simulateBucketDrawdown(input: RetirementInput, startingCorpus: number): BucketDrawdownRow[] {
+  const nowYear = new Date().getFullYear();
+  return runBucketYears(input, startingCorpus, "display").map((r) => ({
+    age: r.age, year: nowYear + r.yearsFromNow, yearsFromNow: r.yearsFromNow,
+    annualExpenseToday: r.annualExpenseToday, annualExpenseInflated: r.annualExpenseInflated,
+    corpusBalance: r.safeBalance + r.growthBalance,
+    safeBalance: r.safeBalance, growthBalance: r.growthBalance,
+  }));
+}
+
 // Solve flat month-end SIP so that grownCorpus + SIP stream reaches target.
 // `grownCorpus` is the corpus already projected forward to `years` from now
 // (see includedCorpusFutureValue) — this function no longer grows a corpus
