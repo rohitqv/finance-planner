@@ -1,6 +1,16 @@
 "use client";
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import type { MonthlyPoint } from "@/lib/finance/types";
+import { formatINR, formatCompactINR } from "@/lib/finance/format";
+
+const TOOLTIP_STYLE = {
+  borderRadius: 8,
+  border: "1px solid #e5e7eb",
+  fontSize: 12,
+  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",
+} as const;
+
+const AXIS_TICK = { fontSize: 12 };
 
 export default function AccumulationChart({
   required, surplus, startAge,
@@ -13,13 +23,22 @@ export default function AccumulationChart({
   return (
     <div style={{ width: "100%", height: 240 }}>
       <ResponsiveContainer>
-        <LineChart data={data}>
-          <XAxis dataKey="age" />
-          <YAxis width={80} />
-          <Tooltip />
-          <Legend />
-          <Line type="monotone" dataKey="Required" stroke="#2563eb" dot={false} />
-          {surplus ? <Line type="monotone" dataKey="Surplus" stroke="#16a34a" dot={false} /> : null}
+        <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+          <XAxis dataKey="age" tick={AXIS_TICK} />
+          <YAxis
+            width={76}
+            tickFormatter={(v) => formatCompactINR(Number(v))}
+            tick={AXIS_TICK}
+          />
+          <Tooltip
+            formatter={(value) => formatINR(Number(value))}
+            labelFormatter={(v) => `Age ${v}`}
+            cursor={{ stroke: "#94a3b8", strokeDasharray: "4 4" }}
+            contentStyle={TOOLTIP_STYLE}
+          />
+          <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
+          <Line type="monotone" dataKey="Required" stroke="#2563eb" dot={false} strokeWidth={2} />
+          {surplus ? <Line type="monotone" dataKey="Surplus" stroke="#16a34a" dot={false} strokeWidth={2} /> : null}
         </LineChart>
       </ResponsiveContainer>
     </div>

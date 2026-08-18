@@ -5,8 +5,7 @@ import { formatINR, formatPct } from "@/lib/finance/format";
 type Card = { label: string; value: string; signed?: boolean; positive?: boolean };
 
 export default function ResultCards({ result }: { result: CalculatorResult }) {
-  const cards: Card[] = [
-    { label: "Future Value", value: formatINR(result.futureValue) },
+  const secondary: Card[] = [
     { label: "Total Invested", value: formatINR(result.totalInvested) },
     {
       label: "Gain",
@@ -29,30 +28,41 @@ export default function ResultCards({ result }: { result: CalculatorResult }) {
     { label: "Inflation-adjusted FV", value: formatINR(result.inflationAdjustedFV) },
   ];
   return (
-    <div className="grid grid-cols-2 gap-4">
-      {cards.map((c) => (
-        <div
-          key={c.label}
-          className={
-            c.signed
-              ? `rounded-xl p-4 shadow-sm ${c.positive ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`
-              : "rounded-xl border p-4 shadow-sm"
-          }
-        >
-          <div className={`text-xs uppercase ${c.signed ? "" : "text-gray-500"}`}>
-            {c.label}
-          </div>
-          <div className="text-lg font-semibold">
-            {c.signed && (
-              <span aria-hidden="true" className="mr-1">
-                {c.positive ? "▲" : "▼"}
-              </span>
-            )}
-            {c.signed && !c.positive && <span className="sr-only">negative </span>}
-            <span>{c.value}</span>
-          </div>
+    <div className="space-y-4">
+      {/* Hero metric — the headline number everything else supports. */}
+      <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-4 shadow-sm">
+        <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+          Future Value
         </div>
-      ))}
+        <div className="mt-1 text-2xl font-bold text-gray-900">
+          {formatINR(result.futureValue)}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        {secondary.map((c) => (
+          <div
+            key={c.label}
+            className={
+              c.signed
+                ? `rounded-xl p-4 shadow-sm ${c.positive ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`
+                : "rounded-xl border p-4 shadow-sm"
+            }
+          >
+            <div className={`text-xs uppercase ${c.signed ? "" : "text-gray-500"}`}>
+              {c.label}
+            </div>
+            <div className="text-lg font-semibold">
+              {c.signed && (
+                <span aria-hidden="true" className="mr-1">
+                  {c.positive ? "▲" : "▼"}
+                </span>
+              )}
+              {c.signed && !c.positive && <span className="sr-only">negative </span>}
+              <span>{c.value}</span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
