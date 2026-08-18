@@ -14,6 +14,22 @@ if (typeof globalThis.ResizeObserver === "undefined") {
   globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
 }
 
+// jsdom doesn't implement matchMedia. ThemeToggle and the theme-init script
+// use it to detect the OS color scheme, so any test that mounts a tree
+// containing ThemeToggle needs at least a no-op implementation.
+if (typeof window.matchMedia === "undefined") {
+  window.matchMedia = ((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+}
+
 Object.defineProperty(HTMLElement.prototype, "getBoundingClientRect", {
   configurable: true,
   value: () => ({
