@@ -17,3 +17,21 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Hide native number-input steppers so field heights stay consistent
+   across browsers (inputs render with our own ₹/% adornments). */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Consistent, visible keyboard focus everywhere. */
+:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}

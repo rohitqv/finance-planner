@@ -11,12 +11,7 @@ export default function AssetClassTable({
 
   return (
     <div>
-      <p className="text-xs text-gray-500">
-        Included assets are assumed fully liquid and available to fund
-        retirement expenses. Excluded assets aren&apos;t counted in any total
-        or calculation below.
-      </p>
-      <table className="mt-2 w-full text-sm">
+      <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-gray-500">
             <th className="py-1">Asset class</th>

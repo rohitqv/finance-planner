@@ -13,8 +13,10 @@ export default function Page() {
 
   return (
     <main className="mx-auto max-w-5xl p-6">
-      <h1 className="mb-4 text-2xl font-bold">Finance Planner</h1>
-      <BackupRestore />
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold tracking-tight">Finance Planner</h1>
+        <BackupRestore />
+      </header>
       <Tabs tabs={["Investment Calculator", "Retirement Planner", "Resources"]} active={active} onSelect={setActive} />
       {active === 0 ? (
         <CalculatorTab initial={handoff} />

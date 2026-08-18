@@ -23,6 +23,12 @@ const scenario: Scenario = {
 let reloadMock: ReturnType<typeof vi.fn>;
 let lastDownloadFilename: string | undefined;
 
+// The export/import controls live in a dropdown behind the "Backup & Data"
+// toggle, so every test that inspects or interacts with them opens it first.
+function openMenu() {
+  fireEvent.click(screen.getByRole("button", { name: /backup/i }));
+}
+
 beforeEach(() => {
   localStorage.clear();
   reloadMock = vi.fn();
@@ -56,6 +62,7 @@ function backupFile(payload: unknown, name = "backup.json"): File {
 describe("BackupRestore", () => {
   it("disables Export when nothing is saved", () => {
     render(<BackupRestore />);
+    openMenu();
     expect(screen.getByRole("button", { name: /export data/i })).toBeDisabled();
   });
 
@@ -63,6 +70,7 @@ describe("BackupRestore", () => {
     savePlan(plan);
     saveScenarios([scenario]);
     render(<BackupRestore />);
+    openMenu();
     expect(screen.getByRole("button", { name: /export data/i })).toBeEnabled();
     expect(screen.getByLabelText(/include retirement plan/i)).toBeChecked();
     expect(screen.getByLabelText(/include saved scenarios/i)).toBeChecked();
@@ -72,6 +80,7 @@ describe("BackupRestore", () => {
     savePlan(plan);
     saveScenarios([scenario]);
     render(<BackupRestore />);
+    openMenu();
 
     const createObjectURL = global.URL.createObjectURL as ReturnType<typeof vi.fn>;
     fireEvent.click(screen.getByRole("button", { name: /export data/i }));
@@ -89,6 +98,7 @@ describe("BackupRestore", () => {
     savePlan(plan);
     saveScenarios([scenario]);
     render(<BackupRestore />);
+    openMenu();
 
     fireEvent.click(screen.getByLabelText(/include retirement plan/i));
     expect(screen.getByLabelText(/include retirement plan/i)).not.toBeChecked();
@@ -104,6 +114,7 @@ describe("BackupRestore", () => {
 
   it("shows an error and saves nothing when the imported file is invalid", async () => {
     render(<BackupRestore />);
+    openMenu();
     const input = screen.getByLabelText(/import backup file/i) as HTMLInputElement;
     fireEvent.change(input, { target: { files: [backupFile({ not: "a backup" })] } });
 
@@ -181,13 +192,14 @@ describe("BackupRestore", () => {
 
   it("refreshes and auto-checks a newly-available scenario list when the user's mouse enters the controls (no reload required)", () => {
     render(<BackupRestore />);
+    openMenu();
     expect(screen.getByLabelText(/include saved scenarios/i)).not.toBeChecked();
     expect(screen.getByLabelText(/include saved scenarios/i)).toBeDisabled();
 
     // Data saved elsewhere in the app, after this component already mounted.
     saveScenarios([scenario]);
 
-    fireEvent.mouseEnter(screen.getByRole("button", { name: /export data/i }).parentElement!);
+    fireEvent.mouseEnter(screen.getByRole("button", { name: /backup/i }).parentElement!);
 
     expect(screen.getByLabelText(/include saved scenarios/i)).toBeChecked();
     expect(screen.getByLabelText(/include saved scenarios/i)).toBeEnabled();
@@ -196,6 +208,7 @@ describe("BackupRestore", () => {
   it("does not override a user's manual uncheck when refreshing and the underlying data still exists", () => {
     savePlan(plan);
     render(<BackupRestore />);
+    openMenu();
     const planCheckbox = screen.getByLabelText(/include retirement plan/i);
     expect(planCheckbox).toBeChecked();
 
@@ -203,7 +216,7 @@ describe("BackupRestore", () => {
     expect(planCheckbox).not.toBeChecked();
 
     // Plan still exists (unchanged) — a refresh must not silently re-check it.
-    fireEvent.mouseEnter(screen.getByRole("button", { name: /export data/i }).parentElement!);
+    fireEvent.mouseEnter(screen.getByRole("button", { name: /backup/i }).parentElement!);
 
     expect(planCheckbox).not.toBeChecked();
   });
@@ -216,9 +229,9 @@ describe("BackupRestore", () => {
     // (which commits the initial render but does NOT flush passive effects)
     // mirrors what a real browser does: paint first, run the post-hydration
     // `useEffect` after. If that first render ever read localStorage
-    // directly, it would show checked/enabled controls here that a real
-    // server render (no `window`/`localStorage`) could never have produced —
-    // a hydration mismatch.
+    // directly, it would show the export controls with real saved data here
+    // that a real server render (no `window`/`localStorage`) could never
+    // have produced — a hydration mismatch.
     let container: HTMLDivElement;
     let root: Root;
 
@@ -232,7 +245,7 @@ describe("BackupRestore", () => {
       container.remove();
     });
 
-    it("renders Export disabled on the very first (pre-effect) commit even when a plan and scenarios are already saved", async () => {
+    it("renders only the collapsed toggle on the very first (pre-effect) commit even when a plan and scenarios are already saved", async () => {
       savePlan(plan);
       saveScenarios([scenario]);
 
@@ -240,13 +253,17 @@ describe("BackupRestore", () => {
       flushSync(() => root.render(<BackupRestore />));
 
       // First paint must match what a server render would have produced:
-      // nothing saved, because SSR never sees localStorage.
-      const exportButton = container.querySelector("button");
-      expect(exportButton?.textContent).toMatch(/export data/i);
-      expect(exportButton).toBeDisabled();
+      // the dropdown collapsed (nothing saved visible, because SSR never
+      // sees localStorage), with no export controls in the DOM at all.
+      const toggle = container.querySelector("button");
+      expect(toggle?.textContent).toMatch(/backup/i);
+      expect(container.textContent).not.toMatch(/export data/i);
 
-      // After effects flush (post-hydration), the real saved data shows up.
+      // After effects flush (post-hydration), the real saved data shows up
+      // once the user opens the dropdown.
       await act(async () => {});
+      fireEvent.click(toggle!);
+      const exportButton = screen.getByRole("button", { name: /export data/i });
       expect(exportButton).toBeEnabled();
     });
   });

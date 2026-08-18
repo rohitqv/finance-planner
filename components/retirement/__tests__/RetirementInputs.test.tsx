@@ -13,9 +13,9 @@ const value: RetirementInput = {
 describe("RetirementInputs — bucket strategy", () => {
   it("hides the bucket-strategy fields when the checkbox is off", () => {
     render(<RetirementInputs value={value} onChange={vi.fn()} />);
-    expect(screen.queryByLabelText("Years of expense kept safe")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Safe bucket rate (%)")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Growth bucket rate (%)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/years of expense kept safe/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/safe bucket rate/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/growth bucket rate/i)).not.toBeInTheDocument();
   });
 
   it("calls onChange with useBucketStrategy: true when the checkbox is checked", () => {
@@ -30,9 +30,9 @@ describe("RetirementInputs — bucket strategy", () => {
     const checked = { ...value, useBucketStrategy: true };
     render(<RetirementInputs value={checked} onChange={onChange} />);
 
-    expect(screen.getByLabelText("Years of expense kept safe")).toBeInTheDocument();
+    expect(screen.getByLabelText(/years of expense kept safe/i)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Safe bucket rate (%)"), { target: { value: "6.5" } });
+    fireEvent.change(screen.getByLabelText(/safe bucket rate/i), { target: { value: "6.5" } });
     expect(onChange).toHaveBeenCalledWith({ ...checked, safeBucketRatePct: 6.5 });
   });
 });

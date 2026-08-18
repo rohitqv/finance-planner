@@ -77,13 +77,13 @@ export default function CalculatorTab({ initial }: { initial?: Partial<Calculato
         <div className="mt-4 flex gap-2">
           <input
             aria-label="Scenario name"
-            className="flex-1 rounded border px-3 py-2"
+            className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500"
             placeholder="Scenario name"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <button
-            className="rounded bg-blue-600 px-4 py-2 text-white"
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
             onClick={() => {
               if (!name.trim()) return;
               setScenarios(addScenario({ ...input, name: name.trim(), corpusGoal: goal }));
@@ -95,7 +95,7 @@ export default function CalculatorTab({ initial }: { initial?: Partial<Calculato
           </button>
           {selectedScenarioId && (
             <button
-              className="rounded bg-green-600 px-4 py-2 text-white"
+              className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
               onClick={() => {
                 const patch: Partial<Scenario> = { ...input, corpusGoal: goal };
                 if (name.trim()) patch.name = name.trim();
@@ -112,7 +112,9 @@ export default function CalculatorTab({ initial }: { initial?: Partial<Calculato
         <GrowthChart series={series} goal={goal} />
       </div>
       <div className="md:col-span-2">
-        <h3 className="mb-2 font-semibold">Saved scenarios</h3>
+        <h3 className="mb-2 font-semibold">
+          Saved scenarios{scenarios.length > 0 ? ` (${scenarios.length})` : ""}
+        </h3>
         <ScenarioTable
           scenarios={scenarios}
           onDelete={(id) => {

@@ -10,6 +10,7 @@ import AccumulationChart from "./AccumulationChart";
 import AccumulationTable from "./AccumulationTable";
 import { computeRetirement, computeAccumulationSplit, includedCorpusAmount, DEFAULT_ASSET_CLASSES, type RetirementInput } from "@/lib/finance/retirement";
 import { loadPlan, savePlan } from "@/store/retirementPlan";
+import InfoTip from "@/components/InfoTip";
 
 const DEFAULT: RetirementInput = {
   currentAge: 30, retirementAge: 55, lifespanAge: 85,
@@ -61,34 +62,40 @@ export default function RetirementTab({
         <PhaseEditor phases={input.phases} onChange={(phases) => setInput({ ...input, phases })} />
       </div>
       <div className="space-y-4">
-        <RetirementResults result={result} invalidLifespan={invalidLifespan} />
-        <button
-          className="rounded bg-blue-600 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={!canHandoff}
-          title={
-            canHandoff
-              ? undefined
-              : "Set a retirement age greater than current age and a lifespan greater than retirement age first."
+        <RetirementResults
+          result={result}
+          invalidLifespan={invalidLifespan}
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!canHandoff}
+                title={
+                  canHandoff
+                    ? undefined
+                    : "Set a retirement age greater than current age and a lifespan greater than retirement age first."
+                }
+                onClick={() => {
+                  if (!canHandoff) return;
+                  onHandoff?.({
+                    monthlySip: Math.round(result.requiredMonthlySip),
+                    lumpsum: includedCorpusAmount(input.assetClasses),
+                    years: input.retirementAge - input.currentAge,
+                    corpusGoal: Math.round(result.corpusNeededAtRetirement),
+                    annualReturn: input.preReturnPct,
+                    inflationPct: input.inflationPct,
+                  });
+                }}
+              >
+                Plan this in Calculator
+              </button>
+              <InfoTip
+                label="About the handoff calculation"
+                text="Uses only the asset classes counted toward retirement (see checkboxes above), grown at the return on monthly investment rate above — not each asset class's own rate."
+              />
+            </div>
           }
-          onClick={() => {
-            if (!canHandoff) return;
-            onHandoff?.({
-              monthlySip: Math.round(result.requiredMonthlySip),
-              lumpsum: includedCorpusAmount(input.assetClasses),
-              years: input.retirementAge - input.currentAge,
-              corpusGoal: Math.round(result.corpusNeededAtRetirement),
-              annualReturn: input.preReturnPct,
-              inflationPct: input.inflationPct,
-            });
-          }}
-        >
-          Plan this in Calculator
-        </button>
-        <p className="text-xs text-gray-500">
-          Uses only the asset classes counted toward retirement (see checkboxes
-          above), grown at the return on monthly investment rate above — not
-          each asset class&apos;s own rate.
-        </p>
+        />
         <DrawdownChart rows={result.drawdown} />
       </div>
       <div className="md:col-span-2">

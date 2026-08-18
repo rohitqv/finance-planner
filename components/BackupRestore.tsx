@@ -16,7 +16,9 @@ export default function BackupRestore() {
   const [includePlan, setIncludePlan] = useState(false);
   const [includeScenarios, setIncludeScenarios] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   // Re-syncs plan/scenarios from localStorage. This component is mounted
   // once in app/page.tsx and never remounts on tab switches, so data saved
@@ -48,8 +50,27 @@ export default function BackupRestore() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate post-hydration read of localStorage, see comment above
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: refresh() is intentionally re-created each render (it closes over current plan/scenarios) and is also called imperatively from onMouseEnter/onFocus below; including it here would defeat the mount-only intent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: refresh() is intentionally re-created each render (it closes over current plan/scenarios) and is also called imperatively from the handlers below; including it here would defeat the mount-only intent.
   }, []);
+
+  // Close the dropdown on outside clicks and Escape while it's open.
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
 
   const canExport = (includePlan && plan !== null) || (includeScenarios && scenarios.length > 0);
 
@@ -113,37 +134,79 @@ export default function BackupRestore() {
   };
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3 text-sm" onMouseEnter={refresh} onFocus={refresh} onPointerDown={refresh}>
-      <label className="flex items-center gap-1">
-        <input
-          type="checkbox"
-          aria-label="Include retirement plan in export"
-          checked={includePlan}
-          disabled={plan === null}
-          onChange={(e) => setIncludePlan(e.target.checked)}
-        />
-        Retirement plan
-      </label>
-      <label className="flex items-center gap-1">
-        <input
-          type="checkbox"
-          aria-label="Include saved scenarios in export"
-          checked={includeScenarios}
-          disabled={scenarios.length === 0}
-          onChange={(e) => setIncludeScenarios(e.target.checked)}
-        />
-        Saved scenarios ({scenarios.length})
-      </label>
+    <div
+      ref={rootRef}
+      className="relative text-sm"
+      onMouseEnter={refresh}
+      onFocus={refresh}
+      onPointerDown={refresh}
+    >
       <button
-        className="rounded border px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50"
-        disabled={!canExport}
-        onClick={handleExport}
+        type="button"
+        aria-expanded={open}
+        className="flex items-center gap-2 rounded-full border border-gray-300 bg-white px-3.5 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:border-gray-400 hover:bg-gray-50"
+        onClick={() => {
+          refresh();
+          setOpen((v) => !v);
+        }}
       >
-        Export data
+        <svg
+          aria-hidden="true"
+          className="h-4 w-4 text-gray-500"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+        >
+          <path d="M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm1 4a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm-1 3.5a1 1 0 0 1 1 1V13a1 1 0 1 1-2 0v-1.5a1 1 0 0 1 1-1Z" />
+        </svg>
+        Backup &amp; Data
       </button>
-      <button className="rounded border px-3 py-1" onClick={() => fileInputRef.current?.click()}>
-        Import data
-      </button>
+
+      {open ? (
+        <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-xl border border-gray-200 bg-white p-4 shadow-lg">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+            Export / import
+          </p>
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                aria-label="Include retirement plan in export"
+                checked={includePlan}
+                disabled={plan === null}
+                onChange={(e) => setIncludePlan(e.target.checked)}
+              />
+              Retirement plan
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                aria-label="Include saved scenarios in export"
+                checked={includeScenarios}
+                disabled={scenarios.length === 0}
+                onChange={(e) => setIncludeScenarios(e.target.checked)}
+              />
+              Saved scenarios ({scenarios.length})
+            </label>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button
+              className="flex-1 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!canExport}
+              onClick={handleExport}
+            >
+              Export data
+            </button>
+            <button
+              className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Import data
+            </button>
+          </div>
+          {error ? <span className="mt-2 block text-xs text-red-600">{error}</span> : null}
+        </div>
+      ) : null}
+
       <input
         ref={fileInputRef}
         type="file"
@@ -156,7 +219,6 @@ export default function BackupRestore() {
           if (file) void handleImportFile(file);
         }}
       />
-      {error && <span className="text-red-600">{error}</span>}
     </div>
   );
 }
