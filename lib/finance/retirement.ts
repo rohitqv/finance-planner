@@ -89,7 +89,6 @@ export function isBucketDrawdown(
 }
 
 type BucketState = { safeBalance: number; growthBalance: number };
-type BucketMode = "raw" | "display";
 
 function bucketYearlyExpense(input: RetirementInput, age: number, infl: number): number {
   return annualExpenseTodayForAge(input, age) * Math.pow(1 + infl, age - input.currentAge);
@@ -109,14 +108,11 @@ function bucketRefillTarget(input: RetirementInput, age: number, infl: number): 
 // One year of bucket-strategy drawdown: withdraw this year's expense from
 // the safe bucket, grow both buckets at their own rate, then rebalance the
 // safe bucket back to `bucketRefillTarget`, moving the difference to/from
-// the growth bucket. In "display" mode, a transfer *into* the safe bucket
-// is capped at the growth bucket's balance (money can't come from
-// nowhere) and both balances floor at 0 for the row shown to the user; in
-// "raw" mode (used only by solveBucketCorpusNeeded) neither the cap nor
-// the floor is applied, so the ending balance stays a smooth, monotonic
-// function of the starting corpus that bisection can search over.
+// the growth bucket. A transfer *into* the safe bucket is capped at the
+// growth bucket's balance (money can't come from nowhere) and both balances
+// floor at 0.
 function stepBucketYear(
-  input: RetirementInput, state: BucketState, age: number, infl: number, mode: BucketMode,
+  input: RetirementInput, state: BucketState, age: number, infl: number,
 ): BucketState {
   const expense = bucketYearlyExpense(input, age, infl);
   let safeBalance = (state.safeBalance - expense) * (1 + input.safeBucketRatePct / 100);
@@ -124,23 +120,21 @@ function stepBucketYear(
 
   const target = bucketRefillTarget(input, age, infl);
   const desiredTransfer = target - safeBalance;
-  const transfer = mode === "display" && desiredTransfer > 0
+  const transfer = desiredTransfer > 0
     ? Math.min(desiredTransfer, growthBalance)
     : desiredTransfer;
   safeBalance += transfer;
   growthBalance -= transfer;
 
-  if (mode === "display") {
-    safeBalance = Math.max(0, safeBalance);
-    growthBalance = Math.max(0, growthBalance);
-  }
+  safeBalance = Math.max(0, safeBalance);
+  growthBalance = Math.max(0, growthBalance);
   return { safeBalance, growthBalance };
 }
 
 // Split the starting corpus at retirement: `bucketYears` worth of expense
 // (starting with this year's) goes to the safe bucket, the rest to growth.
 function initialBucketSplit(
-  input: RetirementInput, startingCorpus: number, infl: number, mode: BucketMode,
+  input: RetirementInput, startingCorpus: number, infl: number,
 ): BucketState {
   const span = Math.min(input.bucketYears, input.lifespanAge - input.retirementAge + 1);
   let initialTarget = 0;
@@ -149,7 +143,7 @@ function initialBucketSplit(
   }
   const safeBalance = Math.min(startingCorpus, initialTarget);
   const growthBalanceRaw = startingCorpus - initialTarget;
-  return { safeBalance, growthBalance: mode === "display" ? Math.max(0, growthBalanceRaw) : growthBalanceRaw };
+  return { safeBalance, growthBalance: Math.max(0, growthBalanceRaw) };
 }
 
 type BucketYearRow = {
@@ -157,12 +151,12 @@ type BucketYearRow = {
   safeBalance: number; growthBalance: number;
 };
 
-function runBucketYears(input: RetirementInput, startingCorpus: number, mode: BucketMode): BucketYearRow[] {
+function runBucketYears(input: RetirementInput, startingCorpus: number): BucketYearRow[] {
   const infl = input.inflationPct / 100;
-  let state = initialBucketSplit(input, startingCorpus, infl, mode);
+  let state = initialBucketSplit(input, startingCorpus, infl);
   const rows: BucketYearRow[] = [];
   for (let age = input.retirementAge; age <= input.lifespanAge; age++) {
-    state = stepBucketYear(input, state, age, infl, mode);
+    state = stepBucketYear(input, state, age, infl);
     rows.push({
       age, yearsFromNow: age - input.currentAge,
       annualExpenseToday: annualExpenseTodayForAge(input, age),
@@ -175,7 +169,7 @@ function runBucketYears(input: RetirementInput, startingCorpus: number, mode: Bu
 
 export function simulateBucketDrawdown(input: RetirementInput, startingCorpus: number): BucketDrawdownRow[] {
   const nowYear = new Date().getFullYear();
-  return runBucketYears(input, startingCorpus, "display").map((r) => ({
+  return runBucketYears(input, startingCorpus).map((r) => ({
     age: r.age, year: nowYear + r.yearsFromNow, yearsFromNow: r.yearsFromNow,
     annualExpenseToday: r.annualExpenseToday, annualExpenseInflated: r.annualExpenseInflated,
     corpusBalance: r.safeBalance + r.growthBalance,
@@ -185,37 +179,30 @@ export function simulateBucketDrawdown(input: RetirementInput, startingCorpus: n
 
 // Bracket-and-bisect on the starting corpus (same technique as the XIRR
 // solver in lib/finance/returns.ts, but the search variable here is a
-// rupee amount, not a rate): find the starting corpus whose raw
-// (unclamped) ending balance at lifespanAge is exactly 0. Ending balance
-// is monotonically increasing in startingCorpus under positive bucket
-// rates, so a sign change always brackets the root.
+// rupee amount, not a rate): find the starting corpus whose ending balance
+// at lifespanAge is exactly 0. Display-mode ending balance floors at 0 once
+// a corpus is insufficient, so <= 0 (not < 0) is the 'still insufficient'
+// test; because every step is built from min/max (continuous, monotonic
+// non-decreasing functions), the balance is continuous and monotonic
+// non-decreasing in the starting corpus, so this still correctly brackets
+// the point where it first becomes positive.
 export function solveBucketCorpusNeeded(input: RetirementInput): number {
   if (input.lifespanAge < input.retirementAge) return 0;
 
   const endingBalance = (corpus: number): number => {
-    const rows = runBucketYears(input, corpus, "raw");
+    const rows = runBucketYears(input, corpus);
     const last = rows[rows.length - 1];
     return last.safeBalance + last.growthBalance;
   };
 
-  // Start with a range that covers the full retirement need: total expense over all years
-  // plus a buffer for growth in the safe bucket (approx 10-20% annually)
   let lo = 0;
-  const yearsInRetirement = input.lifespanAge - input.retirementAge + 1;
-  const totalExpense = bucketYearlyExpense(input, input.retirementAge, input.inflationPct / 100) * yearsInRetirement;
-  let hi = Math.max(1, totalExpense * 1.5); // 50% buffer for growth and compounding
-
-  for (let iter = 0; iter < 100 && endingBalance(hi) < 0; iter++) hi *= 2;
+  let hi = Math.max(1, bucketYearlyExpense(input, input.retirementAge, input.inflationPct / 100));
+  for (let iter = 0; iter < 100 && endingBalance(hi) <= 0; iter++) hi *= 2;
 
   for (let iter = 0; iter < 100; iter++) {
     if (hi - lo < 1e-6) break;
     const mid = (lo + hi) / 2;
-    const balance = endingBalance(mid);
-    if (balance < 0) {
-      lo = mid;
-    } else {
-      hi = mid;
-    }
+    if (endingBalance(mid) <= 0) lo = mid; else hi = mid;
   }
   return (lo + hi) / 2;
 }
