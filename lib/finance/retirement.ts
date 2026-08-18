@@ -71,7 +71,7 @@ export type RetirementResult = {
   projectedCorpusFromCurrentPlan: number;
   gap: number;
   extraSipToCloseGap: number;
-  drawdown: DrawdownRow[];
+  drawdown: DrawdownRow[] | BucketDrawdownRow[];
 };
 
 export function annualExpenseTodayForAge(input: RetirementInput, age: number): number {
@@ -265,10 +265,17 @@ export function computeRetirement(input: RetirementInput): RetirementResult {
     });
   }
 
-  const corpusNeededToday = corpusNeededAtRetirement / Math.pow(1 + infl, accumYears);
+  let finalCorpusNeededAtRetirement = corpusNeededAtRetirement;
+  let finalDrawdown: DrawdownRow[] | BucketDrawdownRow[] = drawdown;
+  if (input.useBucketStrategy) {
+    finalCorpusNeededAtRetirement = solveBucketCorpusNeeded(input);
+    finalDrawdown = simulateBucketDrawdown(input, finalCorpusNeededAtRetirement);
+  }
+
+  const corpusNeededToday = finalCorpusNeededAtRetirement / Math.pow(1 + infl, accumYears);
   const grownCorpus = includedCorpusFutureValue(input.assetClasses, accumYears);
   const requiredMonthlySip = requiredSip(
-    corpusNeededAtRetirement, accumYears, input.preReturnPct, grownCorpus,
+    finalCorpusNeededAtRetirement, accumYears, input.preReturnPct, grownCorpus,
   );
 
   const investmentStreamFv = accumulate({
@@ -277,20 +284,20 @@ export function computeRetirement(input: RetirementInput): RetirementResult {
   }).futureValue;
   const projectedCorpusFromCurrentPlan = grownCorpus + investmentStreamFv;
 
-  const gap = corpusNeededAtRetirement - projectedCorpusFromCurrentPlan;
+  const gap = finalCorpusNeededAtRetirement - projectedCorpusFromCurrentPlan;
   const extraSipToCloseGap = gap > 0
-    ? requiredSip(corpusNeededAtRetirement, accumYears, input.preReturnPct, grownCorpus)
+    ? requiredSip(finalCorpusNeededAtRetirement, accumYears, input.preReturnPct, grownCorpus)
         - input.currentMonthlyInvestment
     : 0;
 
   return {
-    corpusNeededAtRetirement,
+    corpusNeededAtRetirement: finalCorpusNeededAtRetirement,
     corpusNeededToday,
     requiredMonthlySip,
     projectedCorpusFromCurrentPlan,
     gap,
     extraSipToCloseGap: Math.max(0, extraSipToCloseGap),
-    drawdown,
+    drawdown: finalDrawdown,
   };
 }
 

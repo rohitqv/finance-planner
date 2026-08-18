@@ -348,3 +348,37 @@ describe("solveBucketCorpusNeeded", () => {
     expect(rows[rows.length - 1].corpusBalance).toBeCloseTo(0, -2); // within ~50 rupees
   });
 });
+
+describe("computeRetirement — bucket strategy mode", () => {
+  const bucketInput: RetirementInput = {
+    ...base,
+    useBucketStrategy: true, bucketYears: 5, safeBucketRatePct: 7, growthBucketRatePct: 11,
+  };
+
+  it("returns BucketDrawdownRow[] (with safe/growth balances) when useBucketStrategy is true", () => {
+    const r = computeRetirement(bucketInput);
+    expect(isBucketDrawdown(r.drawdown)).toBe(true);
+  });
+
+  it("still returns plain DrawdownRow[] (no safeBalance) when useBucketStrategy is false", () => {
+    const r = computeRetirement(base);
+    expect(isBucketDrawdown(r.drawdown)).toBe(false);
+  });
+
+  it("depletes to ~0 at lifespanAge in bucket mode, mirroring the flat-rate round-trip test above", () => {
+    const r = computeRetirement(bucketInput);
+    const last = r.drawdown[r.drawdown.length - 1];
+    expect(last.corpusBalance).toBeCloseTo(0, -2); // within ~50 rupees
+  });
+
+  it("requiredMonthlySip, invested alongside the projected corpus, reaches corpusNeededAtRetirement", () => {
+    const r = computeRetirement(bucketInput);
+    const accumYears = bucketInput.retirementAge - bucketInput.currentAge;
+    const grownCorpus = includedCorpusFutureValue(bucketInput.assetClasses, accumYears);
+    const sipFv = accumulate({
+      lumpsum: 0, monthlySip: r.requiredMonthlySip, stepUpPct: 0,
+      annualReturn: bucketInput.preReturnPct, years: accumYears, inflationPct: 0,
+    }).futureValue;
+    expect(grownCorpus + sipFv).toBeCloseTo(r.corpusNeededAtRetirement, -1);
+  });
+});
