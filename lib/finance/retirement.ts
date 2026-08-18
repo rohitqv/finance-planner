@@ -183,6 +183,43 @@ export function simulateBucketDrawdown(input: RetirementInput, startingCorpus: n
   }));
 }
 
+// Bracket-and-bisect on the starting corpus (same technique as the XIRR
+// solver in lib/finance/returns.ts, but the search variable here is a
+// rupee amount, not a rate): find the starting corpus whose raw
+// (unclamped) ending balance at lifespanAge is exactly 0. Ending balance
+// is monotonically increasing in startingCorpus under positive bucket
+// rates, so a sign change always brackets the root.
+export function solveBucketCorpusNeeded(input: RetirementInput): number {
+  if (input.lifespanAge < input.retirementAge) return 0;
+
+  const endingBalance = (corpus: number): number => {
+    const rows = runBucketYears(input, corpus, "raw");
+    const last = rows[rows.length - 1];
+    return last.safeBalance + last.growthBalance;
+  };
+
+  // Start with a range that covers the full retirement need: total expense over all years
+  // plus a buffer for growth in the safe bucket (approx 10-20% annually)
+  let lo = 0;
+  const yearsInRetirement = input.lifespanAge - input.retirementAge + 1;
+  const totalExpense = bucketYearlyExpense(input, input.retirementAge, input.inflationPct / 100) * yearsInRetirement;
+  let hi = Math.max(1, totalExpense * 1.5); // 50% buffer for growth and compounding
+
+  for (let iter = 0; iter < 100 && endingBalance(hi) < 0; iter++) hi *= 2;
+
+  for (let iter = 0; iter < 100; iter++) {
+    if (hi - lo < 1e-6) break;
+    const mid = (lo + hi) / 2;
+    const balance = endingBalance(mid);
+    if (balance < 0) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return (lo + hi) / 2;
+}
+
 // Solve flat month-end SIP so that grownCorpus + SIP stream reaches target.
 // `grownCorpus` is the corpus already projected forward to `years` from now
 // (see includedCorpusFutureValue) — this function no longer grows a corpus

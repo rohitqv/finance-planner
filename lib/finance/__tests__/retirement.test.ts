@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   computeRetirement, computeAccumulationSplit, requiredSip,
   includedCorpusFutureValue, includedCorpusAmount,
-  simulateBucketDrawdown, isBucketDrawdown,
+  simulateBucketDrawdown, isBucketDrawdown, solveBucketCorpusNeeded,
   DEFAULT_ASSET_CLASSES, type RetirementInput, type AssetClass,
 } from "@/lib/finance/retirement";
 import { accumulate } from "@/lib/finance/accumulation";
@@ -310,5 +310,41 @@ describe("isBucketDrawdown", () => {
     expect(isBucketDrawdown(simulateBucketDrawdown(bucketBase, 5_000_000))).toBe(true);
     expect(isBucketDrawdown(computeRetirement(base).drawdown)).toBe(false);
     expect(isBucketDrawdown([])).toBe(false);
+  });
+});
+
+describe("solveBucketCorpusNeeded", () => {
+  const bucketBase: RetirementInput = {
+    ...base,
+    currentAge: 60, retirementAge: 60, lifespanAge: 62,
+    currentMonthlyExpense: 100_000, inflationPct: 0,
+    useBucketStrategy: true, bucketYears: 2, safeBucketRatePct: 10, growthBucketRatePct: 20,
+  };
+
+  it("solves a starting corpus that depletes to ~0 exactly at lifespanAge", () => {
+    const corpus = solveBucketCorpusNeeded(bucketBase);
+    const rows = simulateBucketDrawdown(bucketBase, corpus);
+    expect(rows[rows.length - 1].corpusBalance).toBeCloseTo(0, 0);
+  });
+
+  it("a larger starting corpus than the solved amount ends with money left over", () => {
+    const corpus = solveBucketCorpusNeeded(bucketBase);
+    const rows = simulateBucketDrawdown(bucketBase, corpus + 1_000_000);
+    expect(rows[rows.length - 1].corpusBalance).toBeGreaterThan(0);
+  });
+
+  it("returns 0 when lifespanAge is before retirementAge, instead of crashing", () => {
+    const invalid: RetirementInput = { ...bucketBase, lifespanAge: 59 };
+    expect(solveBucketCorpusNeeded(invalid)).toBe(0);
+  });
+
+  it("converges for a realistic multi-decade horizon (30 years)", () => {
+    const longHorizon: RetirementInput = {
+      ...base, useBucketStrategy: true, bucketYears: 5, safeBucketRatePct: 7, growthBucketRatePct: 11,
+    };
+    const corpus = solveBucketCorpusNeeded(longHorizon);
+    expect(corpus).toBeGreaterThan(0);
+    const rows = simulateBucketDrawdown(longHorizon, corpus);
+    expect(rows[rows.length - 1].corpusBalance).toBeCloseTo(0, -2); // within ~50 rupees
   });
 });
