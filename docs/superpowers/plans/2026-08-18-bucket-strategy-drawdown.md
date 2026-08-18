@@ -329,7 +329,6 @@ export function isBucketDrawdown(
 }
 
 type BucketState = { safeBalance: number; growthBalance: number };
-type BucketMode = "raw" | "display";
 
 function bucketYearlyExpense(input: RetirementInput, age: number, infl: number): number {
   return annualExpenseTodayForAge(input, age) * Math.pow(1 + infl, age - input.currentAge);
@@ -349,14 +348,11 @@ function bucketRefillTarget(input: RetirementInput, age: number, infl: number): 
 // One year of bucket-strategy drawdown: withdraw this year's expense from
 // the safe bucket, grow both buckets at their own rate, then rebalance the
 // safe bucket back to `bucketRefillTarget`, moving the difference to/from
-// the growth bucket. In "display" mode, a transfer *into* the safe bucket
-// is capped at the growth bucket's balance (money can't come from
-// nowhere) and both balances floor at 0 for the row shown to the user; in
-// "raw" mode (used only by solveBucketCorpusNeeded) neither the cap nor
-// the floor is applied, so the ending balance stays a smooth, monotonic
-// function of the starting corpus that bisection can search over.
+// the growth bucket. A transfer *into* the safe bucket is capped at the
+// growth bucket's balance (money can't come from nowhere) and both
+// balances floor at 0.
 function stepBucketYear(
-  input: RetirementInput, state: BucketState, age: number, infl: number, mode: BucketMode,
+  input: RetirementInput, state: BucketState, age: number, infl: number,
 ): BucketState {
   const expense = bucketYearlyExpense(input, age, infl);
   let safeBalance = (state.safeBalance - expense) * (1 + input.safeBucketRatePct / 100);
@@ -364,23 +360,17 @@ function stepBucketYear(
 
   const target = bucketRefillTarget(input, age, infl);
   const desiredTransfer = target - safeBalance;
-  const transfer = mode === "display" && desiredTransfer > 0
-    ? Math.min(desiredTransfer, growthBalance)
-    : desiredTransfer;
+  const transfer = desiredTransfer > 0 ? Math.min(desiredTransfer, growthBalance) : desiredTransfer;
   safeBalance += transfer;
   growthBalance -= transfer;
 
-  if (mode === "display") {
-    safeBalance = Math.max(0, safeBalance);
-    growthBalance = Math.max(0, growthBalance);
-  }
-  return { safeBalance, growthBalance };
+  return { safeBalance: Math.max(0, safeBalance), growthBalance: Math.max(0, growthBalance) };
 }
 
 // Split the starting corpus at retirement: `bucketYears` worth of expense
 // (starting with this year's) goes to the safe bucket, the rest to growth.
 function initialBucketSplit(
-  input: RetirementInput, startingCorpus: number, infl: number, mode: BucketMode,
+  input: RetirementInput, startingCorpus: number, infl: number,
 ): BucketState {
   const span = Math.min(input.bucketYears, input.lifespanAge - input.retirementAge + 1);
   let initialTarget = 0;
@@ -388,8 +378,7 @@ function initialBucketSplit(
     initialTarget += bucketYearlyExpense(input, input.retirementAge + k, infl);
   }
   const safeBalance = Math.min(startingCorpus, initialTarget);
-  const growthBalanceRaw = startingCorpus - initialTarget;
-  return { safeBalance, growthBalance: mode === "display" ? Math.max(0, growthBalanceRaw) : growthBalanceRaw };
+  return { safeBalance, growthBalance: Math.max(0, startingCorpus - initialTarget) };
 }
 
 type BucketYearRow = {
@@ -397,12 +386,12 @@ type BucketYearRow = {
   safeBalance: number; growthBalance: number;
 };
 
-function runBucketYears(input: RetirementInput, startingCorpus: number, mode: BucketMode): BucketYearRow[] {
+function runBucketYears(input: RetirementInput, startingCorpus: number): BucketYearRow[] {
   const infl = input.inflationPct / 100;
-  let state = initialBucketSplit(input, startingCorpus, infl, mode);
+  let state = initialBucketSplit(input, startingCorpus, infl);
   const rows: BucketYearRow[] = [];
   for (let age = input.retirementAge; age <= input.lifespanAge; age++) {
-    state = stepBucketYear(input, state, age, infl, mode);
+    state = stepBucketYear(input, state, age, infl);
     rows.push({
       age, yearsFromNow: age - input.currentAge,
       annualExpenseToday: annualExpenseTodayForAge(input, age),
@@ -415,7 +404,7 @@ function runBucketYears(input: RetirementInput, startingCorpus: number, mode: Bu
 
 export function simulateBucketDrawdown(input: RetirementInput, startingCorpus: number): BucketDrawdownRow[] {
   const nowYear = new Date().getFullYear();
-  return runBucketYears(input, startingCorpus, "display").map((r) => ({
+  return runBucketYears(input, startingCorpus).map((r) => ({
     age: r.age, year: nowYear + r.yearsFromNow, yearsFromNow: r.yearsFromNow,
     annualExpenseToday: r.annualExpenseToday, annualExpenseInflated: r.annualExpenseInflated,
     corpusBalance: r.safeBalance + r.growthBalance,
@@ -423,6 +412,19 @@ export function simulateBucketDrawdown(input: RetirementInput, startingCorpus: n
   }));
 }
 ```
+
+> **Correction (made during Task 3 implementation):** the original version of
+> this task specified a `BucketMode` ("raw" vs "display") distinction, with
+> `solveBucketCorpusNeeded` (Task 3) bisecting on an unclamped "raw" ending
+> balance. That was a design bug: the unclamped trajectory allows the growth
+> bucket to go transiently negative (an unfunded transfer), which is not
+> physically realizable, so "raw ending balance = 0" does not imply "the real
+> (clamped) simulation ends at 0" — confirmed by hand: on a 3-year test case
+> the raw-solved corpus left the real simulation with a ~12,000 surplus
+> instead of ~0, and on the 30-year default case the gap was ~856,000. The
+> code above is the corrected version: there is only one mode (what used to
+> be called "display"), and Task 3's solver bisects directly against it. See
+> the correction note on Task 3 below for why that still brackets correctly.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -511,31 +513,44 @@ In `lib/finance/retirement.ts`, add this function directly after `simulateBucket
 ```ts
 // Bracket-and-bisect on the starting corpus (same technique as the XIRR
 // solver in lib/finance/returns.ts, but the search variable here is a
-// rupee amount, not a rate): find the starting corpus whose raw
-// (unclamped) ending balance at lifespanAge is exactly 0. Ending balance
-// is monotonically increasing in startingCorpus under positive bucket
-// rates, so a sign change always brackets the root.
+// rupee amount, not a rate): find the starting corpus whose ending balance
+// at lifespanAge is (just barely) not zero. Ending balance floors at 0
+// once a corpus is insufficient (see stepBucketYear), so "still 0" (not
+// "negative") is the insufficient branch — but because every step is
+// built from Math.min/Math.max, the balance is a continuous, monotonic
+// non-decreasing function of the starting corpus, so `<= 0` still
+// correctly brackets the point where it first turns positive, and by
+// continuity the balance at that boundary is ~0.
 export function solveBucketCorpusNeeded(input: RetirementInput): number {
   if (input.lifespanAge < input.retirementAge) return 0;
 
   const endingBalance = (corpus: number): number => {
-    const rows = runBucketYears(input, corpus, "raw");
+    const rows = runBucketYears(input, corpus);
     const last = rows[rows.length - 1];
     return last.safeBalance + last.growthBalance;
   };
 
   let lo = 0;
   let hi = Math.max(1, bucketYearlyExpense(input, input.retirementAge, input.inflationPct / 100));
-  for (let iter = 0; iter < 100 && endingBalance(hi) < 0; iter++) hi *= 2;
+  for (let iter = 0; iter < 100 && endingBalance(hi) <= 0; iter++) hi *= 2;
 
   for (let iter = 0; iter < 100; iter++) {
     if (hi - lo < 1e-6) break;
     const mid = (lo + hi) / 2;
-    if (endingBalance(mid) < 0) lo = mid; else hi = mid;
+    if (endingBalance(mid) <= 0) lo = mid; else hi = mid;
   }
   return (lo + hi) / 2;
 }
 ```
+
+> **Correction (made during this task's implementation):** the original
+> version of this step called `runBucketYears(input, corpus, "raw")` and
+> used `< 0` as the insufficient-branch test, per the (buggy) "raw mode"
+> design described in Task 2's original text. That solved for a corpus
+> that the real (clamped) simulation does not actually deplete to 0 at —
+> see the correction note at the end of Task 2 above for the root cause
+> and the numbers that exposed it. The code above is the fix: one mode,
+> bisecting on `<= 0` against the real simulation directly.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
