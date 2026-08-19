@@ -10,7 +10,7 @@ export default function AccumulationTable({
   const nowYear = new Date().getFullYear();
 
   return (
-    <TableDisclosure label="Show year-by-year numbers">
+    <TableDisclosure label="Show year-by-year growth">
       <div className="max-h-80 overflow-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-white dark:bg-gray-900">

@@ -17,18 +17,21 @@ Calculate the future value of your investments with support for lump-sum amounts
   - XIRR (Extended Internal Rate of Return) – time-weighted return accounting for irregular cash flows
   - Inflation-Adjusted FV – future value adjusted for inflation
 - **Additional features:** Growth visualization chart, scenario management with save/load/duplicate functionality, and localStorage persistence
+- **Input validation:** Every field is bounds-checked. An empty or out-of-range input is flagged inline and the results are replaced by a summary of what to fix, rather than showing a confident-looking figure derived from a silent zero
 
 ### Retirement Planner
 
 Model your retirement corpus needs and plan your withdrawal strategy:
 
 - **Plan your retirement:** Input current age, retirement age, lifespan, current monthly expenses, investment returns (pre- and post-retirement), and inflation
+- **Annual SIP step-up:** Model raising your monthly investment each year, as most people do with their salary. The required SIP is then reported as the starting month's amount
 - **Expense phases:** Configure custom expense phases during retirement (e.g., high-spending early years, reduced expenses later)
 - **Outputs:**
   - Corpus needed at retirement – total capital required to sustain your retirement
   - Required monthly SIP – how much you need to invest monthly before retirement
   - Year-by-year drawdown table showing corpus balance and annual expenses
   - Growth visualization chart
+- **Two drawdown views:** Chart and table can show either the corpus the plan *requires* (which by construction lasts exactly to your lifespan) or the corpus your current assets and monthly investment are actually **on track for** — the latter reports the age the money runs out and the yearly shortfall from that point on
 - **Multi-age comparison:** Compare retirement corpus needs across different retirement ages (e.g., retire 5 years earlier or later) to inform your decisions
 - **Handoff to Calculator:** With one click, seamlessly pass your corpus target to the Investment Calculator to plan your savings strategy
 
@@ -70,6 +73,8 @@ For continuous testing during development:
 npm run test:watch
 ```
 
+Lint, tests, and a production build all run on every push and pull request via GitHub Actions (`.github/workflows/ci.yml`).
+
 ### Production Build
 
 Create an optimized production build:
@@ -108,9 +113,8 @@ For more details, see the [Next.js deployment documentation](https://nextjs.org/
 
 - `/app` – Next.js App Router pages and layout
 - `/components` – React components for both tabs and their subcomponents
-- `/lib/finance` – Core calculation engines (accumulation, returns, retirement math, utilities)
+- `/lib/finance` – Core calculation engines (accumulation, returns, retirement math), plus shared defaults, input validation, and sanitization of anything read back from storage
 - `/store` – Client-side state management (scenarios, retirement plans, localStorage)
-- `/public` – Static assets
 
 ## Technologies
 
@@ -125,6 +129,8 @@ For more details, see the [Next.js deployment documentation](https://nextjs.org/
 ## Architecture Notes
 
 All calculations are performed client-side in the browser. Scenarios and retirement plans are stored in browser localStorage with versioned keys, ensuring persistence across sessions without requiring backend infrastructure. The shared calculation engine in `/lib/finance` is used by both tabs and is thoroughly tested.
+
+Data read back from localStorage or an imported backup file is treated as untrusted: it is structurally sanitized field by field before use, so a plan saved by an older version, hand-edited, or damaged by a JSON round-trip can never reach the calculation engines as a missing value or a `NaN`. Validation happens at the input boundary rather than inside the engines, which means the engines can assume sane numbers and the UI can explain problems in terms of the field that caused them.
 
 ## License
 

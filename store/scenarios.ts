@@ -5,6 +5,8 @@ export type Scenario = {
   corpusGoal?: number; createdAt: number;
 };
 
+import { sanitizeScenarios } from "@/lib/finance/sanitize";
+
 const KEY = "finance-planner:scenarios:v1";
 const canUse = () => typeof window !== "undefined" && !!window.localStorage;
 
@@ -12,7 +14,10 @@ export function loadScenarios(): Scenario[] {
   if (!canUse()) return [];
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as Scenario[]) : [];
+    // Sanitized rather than cast: every row is fed straight into calculate()
+    // by ScenarioTable, and a hand-edited or partially-written entry would
+    // otherwise surface as NaN figures in the table.
+    return raw ? sanitizeScenarios(JSON.parse(raw)) : [];
   } catch {
     return [];
   }

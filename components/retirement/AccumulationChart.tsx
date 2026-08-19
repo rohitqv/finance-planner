@@ -39,8 +39,8 @@ export default function AccumulationChart({
             contentStyle={TOOLTIP_STYLE}
           />
           <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
-          <Line type="monotone" dataKey="Required" stroke="#2563eb" dot={false} strokeWidth={2} />
-          {surplus ? <Line type="monotone" dataKey="Surplus" stroke="#16a34a" dot={false} strokeWidth={2} /> : null}
+          <Line type="monotone" dataKey="Required" stroke="#2563eb" dot={false} strokeWidth={2} isAnimationActive={false} />
+          {surplus ? <Line type="monotone" dataKey="Surplus" stroke="#16a34a" dot={false} strokeWidth={2} isAnimationActive={false} /> : null}
         </LineChart>
       </ResponsiveContainer>
     </div>

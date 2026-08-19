@@ -34,6 +34,7 @@ export default function Page() {
               corpusGoal: p.corpusGoal,
               annualReturn: p.annualReturn,
               inflationPct: p.inflationPct,
+              stepUpPct: p.stepUpPct,
             });
             setActive(0);
           }}

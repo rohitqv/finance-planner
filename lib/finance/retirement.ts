@@ -31,6 +31,8 @@ export type RetirementInput = {
   phases: ExpensePhase[];
   assetClasses: AssetClass[];
   currentMonthlyInvestment: number;
+  /** Annual increase applied to the monthly investment / required SIP, in %. */
+  sipStepUpPct: number;
   useBucketStrategy: boolean;
   bucketYears: number;
   safeBucketRatePct: number;
@@ -59,6 +61,12 @@ export function includedCorpusAmount(assetClasses: AssetClass[]): number {
 export type DrawdownRow = {
   age: number; year: number; yearsFromNow: number;
   annualExpenseToday: number; annualExpenseInflated: number; corpusBalance: number;
+  // How much of this year's expense the corpus could not fund, in that
+  // year's rupees. Always 0 for a drawdown starting from the *required*
+  // corpus (which is solved to cover every year exactly); the field earns
+  // its keep for a drawdown from the corpus the user is actually on track
+  // for, where running out is the interesting answer.
+  shortfall: number;
 };
 export type AccumulationSplitResult = {
   required: MonthlyPoint[];
@@ -71,7 +79,12 @@ export type RetirementResult = {
   projectedCorpusFromCurrentPlan: number;
   gap: number;
   extraSipToCloseGap: number;
+  /** Drawdown of the corpus the plan *requires* — glides to exactly 0 by design. */
   drawdown: DrawdownRow[] | BucketDrawdownRow[];
+  /** Drawdown of the corpus the user is actually on track for. */
+  projectedDrawdown: DrawdownRow[] | BucketDrawdownRow[];
+  /** First age whose expense the projected corpus cannot fund in full, or null if it lasts. */
+  projectedDepletionAge: number | null;
 };
 
 export function annualExpenseTodayForAge(input: RetirementInput, age: number): number {
@@ -148,7 +161,7 @@ function initialBucketSplit(
 
 type BucketYearRow = {
   age: number; yearsFromNow: number; annualExpenseToday: number; annualExpenseInflated: number;
-  safeBalance: number; growthBalance: number;
+  safeBalance: number; growthBalance: number; shortfall: number;
 };
 
 function runBucketYears(input: RetirementInput, startingCorpus: number): BucketYearRow[] {
@@ -156,24 +169,35 @@ function runBucketYears(input: RetirementInput, startingCorpus: number): BucketY
   let state = initialBucketSplit(input, startingCorpus, infl);
   const rows: BucketYearRow[] = [];
   for (let age = input.retirementAge; age <= input.lifespanAge; age++) {
+    const expense = bucketYearlyExpense(input, age, infl);
+    // Measured against *both* buckets, not just the safe one: the annual
+    // rebalance can backfill safe from growth, so a thin safe bucket is not
+    // by itself a shortfall. Taken before the step, since the step floors
+    // the balances at 0 and erases the evidence.
+    const shortfall = Math.max(0, expense - (state.safeBalance + state.growthBalance));
     state = stepBucketYear(input, state, age, infl);
     rows.push({
       age, yearsFromNow: age - input.currentAge,
       annualExpenseToday: annualExpenseTodayForAge(input, age),
-      annualExpenseInflated: bucketYearlyExpense(input, age, infl),
-      safeBalance: state.safeBalance, growthBalance: state.growthBalance,
+      annualExpenseInflated: expense,
+      safeBalance: state.safeBalance, growthBalance: state.growthBalance, shortfall,
     });
   }
   return rows;
 }
 
-export function simulateBucketDrawdown(input: RetirementInput, startingCorpus: number): BucketDrawdownRow[] {
-  const nowYear = new Date().getFullYear();
+// `nowYear` is injected (defaulting to the real current year) so the row
+// `year` labels are a pure function of the arguments. Reading the clock
+// inside made these otherwise-pure calculations non-deterministic and their
+// tests flaky across a New Year boundary.
+export function simulateBucketDrawdown(
+  input: RetirementInput, startingCorpus: number, nowYear: number = new Date().getFullYear(),
+): BucketDrawdownRow[] {
   return runBucketYears(input, startingCorpus).map((r) => ({
     age: r.age, year: nowYear + r.yearsFromNow, yearsFromNow: r.yearsFromNow,
     annualExpenseToday: r.annualExpenseToday, annualExpenseInflated: r.annualExpenseInflated,
     corpusBalance: r.safeBalance + r.growthBalance,
-    safeBalance: r.safeBalance, growthBalance: r.growthBalance,
+    safeBalance: r.safeBalance, growthBalance: r.growthBalance, shortfall: r.shortfall,
   }));
 }
 
@@ -222,8 +246,14 @@ export function solveBucketCorpusNeeded(input: RetirementInput): number {
 // (see includedCorpusFutureValue) — this function no longer grows a corpus
 // itself, since callers may be summing several asset classes each compounding
 // at a different rate.
+// `stepUpPct` raises the monthly amount once a year, and the returned figure
+// is the *starting* month's SIP. The FV-per-unit shortcut below still holds
+// with a step-up: accumulate() is linear in monthlySip (every cashflow scales
+// by the same factor), so the step-up only changes the constant, not the
+// linearity.
 export function requiredSip(
   target: number, years: number, annualReturnPct: number, grownCorpus: number,
+  stepUpPct = 0,
 ): number {
   const remaining = target - grownCorpus;
   if (remaining <= 0) return 0;
@@ -236,69 +266,112 @@ export function requiredSip(
   if (years <= 0) return Infinity;
   // FV of 1 unit monthly SIP over the horizon (linear in SIP), then scale.
   const fvPerUnit = accumulate({
-    lumpsum: 0, monthlySip: 1, stepUpPct: 0,
+    lumpsum: 0, monthlySip: 1, stepUpPct,
     annualReturn: annualReturnPct, years, inflationPct: 0,
   }).futureValue;
   return remaining / fvPerUnit;
 }
 
-export function computeRetirement(input: RetirementInput): RetirementResult {
-  const accumYears = input.retirementAge - input.currentAge;
-  const nowYear = new Date().getFullYear();
+// Year-by-year drawdown at a single blended post-retirement rate: withdraw
+// the year's inflated expense at the start of the year, then grow what is
+// left. Extracted so the same schedule can be run from any starting corpus —
+// the required one, or the one the user is actually on track for.
+//
+// The carried balance floors at 0, unlike the display-only figure the old
+// inline loop produced: a corpus that runs dry stays dry, rather than
+// compounding a negative balance into an ever-deeper hole. For a drawdown
+// from the *required* corpus the two are identical, since that corpus is
+// solved never to go negative in the first place.
+export function simulateDrawdown(
+  input: RetirementInput, startingCorpus: number, nowYear: number = new Date().getFullYear(),
+): DrawdownRow[] {
   const infl = input.inflationPct / 100;
   const post = input.postReturnPct / 100;
-
-  // Build the drawdown schedule (retirement age .. lifespan age inclusive).
-  const drawdown: DrawdownRow[] = [];
-  let corpusNeededAtRetirement = 0;
-  const rows: { age: number; yearsFromNow: number; annualExpenseToday: number; annualExpenseInflated: number }[] = [];
+  const rows: DrawdownRow[] = [];
+  let balance = startingCorpus;
   for (let age = input.retirementAge; age <= input.lifespanAge; age++) {
     const yearsFromNow = age - input.currentAge;
     const annualExpenseToday = annualExpenseTodayForAge(input, age);
     const annualExpenseInflated = annualExpenseToday * Math.pow(1 + infl, yearsFromNow);
-    rows.push({ age, yearsFromNow, annualExpenseToday, annualExpenseInflated });
-    // Present value at retirement of this year's expense (expense drawn at year start).
-    const yearsIntoRetirement = age - input.retirementAge;
-    corpusNeededAtRetirement += annualExpenseInflated / Math.pow(1 + post, yearsIntoRetirement);
-  }
-
-  // Fill running balance for display.
-  let bal = corpusNeededAtRetirement;
-  for (const r of rows) {
-    const startBal = bal;
-    bal = startBal - r.annualExpenseInflated; // withdraw at start of year
-    bal = bal * (1 + post);                   // grow for the year
-    drawdown.push({
-      age: r.age, year: nowYear + r.yearsFromNow, yearsFromNow: r.yearsFromNow,
-      annualExpenseToday: r.annualExpenseToday, annualExpenseInflated: r.annualExpenseInflated,
-      corpusBalance: Math.max(0, startBal - r.annualExpenseInflated),
+    const shortfall = Math.max(0, annualExpenseInflated - balance);
+    const afterWithdrawal = Math.max(0, balance - annualExpenseInflated);
+    rows.push({
+      age, year: nowYear + yearsFromNow, yearsFromNow,
+      annualExpenseToday, annualExpenseInflated,
+      corpusBalance: afterWithdrawal, shortfall,
     });
+    balance = afterWithdrawal * (1 + post);
   }
+  return rows;
+}
 
-  let finalCorpusNeededAtRetirement = corpusNeededAtRetirement;
-  let finalDrawdown: DrawdownRow[] | BucketDrawdownRow[] = drawdown;
+// Present value at retirement of the whole expense schedule, discounted at
+// the post-retirement return. This is the corpus that funds every year
+// exactly, with nothing left over.
+function flatCorpusNeeded(input: RetirementInput): number {
+  const infl = input.inflationPct / 100;
+  const post = input.postReturnPct / 100;
+  let needed = 0;
+  for (let age = input.retirementAge; age <= input.lifespanAge; age++) {
+    const annualExpenseInflated =
+      annualExpenseTodayForAge(input, age) * Math.pow(1 + infl, age - input.currentAge);
+    needed += annualExpenseInflated / Math.pow(1 + post, age - input.retirementAge);
+  }
+  return needed;
+}
+
+/** First age whose expense could not be funded in full, or null if the corpus lasts. */
+export function firstDepletionAge(rows: DrawdownRow[] | BucketDrawdownRow[]): number | null {
+  return rows.find((r) => r.shortfall > 0)?.age ?? null;
+}
+
+export function computeRetirement(
+  input: RetirementInput, nowYear: number = new Date().getFullYear(),
+): RetirementResult {
+  const accumYears = input.retirementAge - input.currentAge;
+
+  let finalCorpusNeededAtRetirement: number;
+  let finalDrawdown: DrawdownRow[] | BucketDrawdownRow[];
   if (input.useBucketStrategy) {
     finalCorpusNeededAtRetirement = solveBucketCorpusNeeded(input);
-    finalDrawdown = simulateBucketDrawdown(input, finalCorpusNeededAtRetirement);
+    finalDrawdown = simulateBucketDrawdown(input, finalCorpusNeededAtRetirement, nowYear);
+  } else {
+    finalCorpusNeededAtRetirement = flatCorpusNeeded(input);
+    finalDrawdown = simulateDrawdown(input, finalCorpusNeededAtRetirement, nowYear);
   }
+  const infl = input.inflationPct / 100;
 
   const corpusNeededToday = finalCorpusNeededAtRetirement / Math.pow(1 + infl, accumYears);
   const grownCorpus = includedCorpusFutureValue(input.assetClasses, accumYears);
   const requiredMonthlySip = requiredSip(
     finalCorpusNeededAtRetirement, accumYears, input.preReturnPct, grownCorpus,
+    input.sipStepUpPct,
   );
 
+  // The user's existing contribution is stepped up on the same schedule —
+  // it is the same monthly transfer, so comparing a stepped-up requirement
+  // against a flat projection would overstate the gap.
   const investmentStreamFv = accumulate({
-    lumpsum: 0, monthlySip: input.currentMonthlyInvestment, stepUpPct: 0,
+    lumpsum: 0, monthlySip: input.currentMonthlyInvestment, stepUpPct: input.sipStepUpPct,
     annualReturn: input.preReturnPct, years: accumYears, inflationPct: 0,
   }).futureValue;
   const projectedCorpusFromCurrentPlan = grownCorpus + investmentStreamFv;
 
   const gap = finalCorpusNeededAtRetirement - projectedCorpusFromCurrentPlan;
   const extraSipToCloseGap = gap > 0
-    ? requiredSip(finalCorpusNeededAtRetirement, accumYears, input.preReturnPct, grownCorpus)
-        - input.currentMonthlyInvestment
+    ? requiredSip(
+        finalCorpusNeededAtRetirement, accumYears, input.preReturnPct, grownCorpus,
+        input.sipStepUpPct,
+      ) - input.currentMonthlyInvestment
     : 0;
+
+  // The same schedule run from the corpus the user is actually on track for.
+  // `drawdown` above always glides neatly to zero — it is the corpus solved
+  // to do exactly that — so on its own it can never show an underfunded plan
+  // running out of money, which is the question the user came with.
+  const projectedDrawdown = input.useBucketStrategy
+    ? simulateBucketDrawdown(input, projectedCorpusFromCurrentPlan, nowYear)
+    : simulateDrawdown(input, projectedCorpusFromCurrentPlan, nowYear);
 
   return {
     corpusNeededAtRetirement: finalCorpusNeededAtRetirement,
@@ -308,6 +381,8 @@ export function computeRetirement(input: RetirementInput): RetirementResult {
     gap,
     extraSipToCloseGap: Math.max(0, extraSipToCloseGap),
     drawdown: finalDrawdown,
+    projectedDrawdown,
+    projectedDepletionAge: firstDepletionAge(projectedDrawdown),
   };
 }
 
@@ -320,7 +395,7 @@ export function computeAccumulationSplit(
   }
 
   const sipSeries = accumulate({
-    lumpsum: 0, monthlySip: requiredMonthlySip, stepUpPct: 0,
+    lumpsum: 0, monthlySip: requiredMonthlySip, stepUpPct: input.sipStepUpPct,
     annualReturn: input.preReturnPct, years: accumYears, inflationPct: 0,
   }).series;
 
@@ -342,7 +417,7 @@ export function computeAccumulationSplit(
   const surplusAmount = input.currentMonthlyInvestment - requiredMonthlySip;
   const surplus = surplusAmount > 0
     ? accumulate({
-        lumpsum: 0, monthlySip: surplusAmount, stepUpPct: 0,
+        lumpsum: 0, monthlySip: surplusAmount, stepUpPct: input.sipStepUpPct,
         annualReturn: input.preReturnPct, years: accumYears, inflationPct: 0,
       }).series
     : null;

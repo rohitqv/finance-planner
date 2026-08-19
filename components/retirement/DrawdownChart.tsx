@@ -14,6 +14,11 @@ const TOOLTIP_STYLE = {
 
 const AXIS_TICK = { fontSize: 12, fill: "var(--chart-axis-text)" };
 
+// Every chart here recomputes on each keystroke, so Recharts' default
+// enter/update animation would have the drawn curve chasing the numbers by a
+// second or so on every edit. Drawing straight to the new data keeps the
+// chart and the figures beside it telling the same story at all times.
+
 export default function DrawdownChart({ rows }: { rows: DrawdownRow[] | BucketDrawdownRow[] }) {
   if (isBucketDrawdown(rows)) {
     const data = rows.map((r) => ({
@@ -36,8 +41,8 @@ export default function DrawdownChart({ rows }: { rows: DrawdownRow[] | BucketDr
               contentStyle={TOOLTIP_STYLE}
             />
             <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
-            <Line type="monotone" dataKey="Growth bucket" stroke="#16a34a" dot={false} strokeWidth={2} />
-            <Line type="monotone" dataKey="Safe bucket" stroke="#d97706" dot={false} strokeWidth={2} />
+            <Line type="monotone" dataKey="Growth bucket" stroke="#16a34a" dot={false} strokeWidth={2} isAnimationActive={false} />
+            <Line type="monotone" dataKey="Safe bucket" stroke="#d97706" dot={false} strokeWidth={2} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -60,7 +65,7 @@ export default function DrawdownChart({ rows }: { rows: DrawdownRow[] | BucketDr
             cursor={{ stroke: "var(--chart-cursor)", strokeDasharray: "4 4" }}
             contentStyle={TOOLTIP_STYLE}
           />
-          <Area type="monotone" dataKey="Corpus" stroke="#2563eb" strokeWidth={2} fill="#bfdbfe" />
+          <Area type="monotone" dataKey="Corpus" stroke="#2563eb" strokeWidth={2} fill="#bfdbfe" isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
     </div>

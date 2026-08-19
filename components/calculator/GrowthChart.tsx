@@ -31,8 +31,8 @@ export default function GrowthChart({ series, goal }: { series: MonthlyPoint[]; 
             contentStyle={TOOLTIP_STYLE}
           />
           <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
-          <Line type="monotone" dataKey="Invested" stroke="#94a3b8" dot={false} strokeWidth={2} />
-          <Line type="monotone" dataKey="Value" stroke="#2563eb" dot={false} strokeWidth={2} />
+          <Line type="monotone" dataKey="Invested" stroke="#94a3b8" dot={false} strokeWidth={2} isAnimationActive={false} />
+          <Line type="monotone" dataKey="Value" stroke="#2563eb" dot={false} strokeWidth={2} isAnimationActive={false} />
           {goal ? (
             <ReferenceLine
               y={goal}

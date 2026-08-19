@@ -42,11 +42,14 @@ describe("App handoff", () => {
     render(<Page />);
     fireEvent.click(screen.getByRole("button", { name: /retirement planner/i }));
     fireEvent.change(screen.getByLabelText(/retirement age/i), { target: { value: "30" } }); // == default currentAge
-    const handoffButton = screen.getByRole("button", { name: /plan this in calculator/i });
-    expect(handoffButton).toBeDisabled();
-    fireEvent.click(handoffButton);
 
-    // Still on the Retirement tab — the guarded, disabled handoff never fired.
+    // The handoff button used to render disabled here. It now isn't rendered
+    // at all: the whole results panel (button included) is replaced by the
+    // validation summary, so there is no control left to fire.
+    expect(screen.queryByRole("button", { name: /plan this in calculator/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/retirement age must be greater than current age/i)).toBeInTheDocument();
+
+    // Still on the Retirement tab — no handoff happened.
     expect(screen.queryByLabelText(/monthly sip/i)).not.toBeInTheDocument();
   });
 });

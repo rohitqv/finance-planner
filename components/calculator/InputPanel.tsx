@@ -1,6 +1,7 @@
 "use client";
 import type { CalculatorInput } from "@/lib/finance/types";
 import NumberField, { type NumberUnit } from "@/components/ui/NumberField";
+import { CALCULATOR_FIELD_SPECS, type FieldErrors } from "@/lib/finance/validation";
 
 type Field = { key: keyof CalculatorInput; label: string; unit?: NumberUnit; step?: number };
 
@@ -24,8 +25,12 @@ const sections: { title: string; fields: Field[] }[] = [
 ];
 
 export default function InputPanel({
-  value, onChange,
-}: { value: CalculatorInput; onChange: (v: CalculatorInput) => void }) {
+  value, onChange, errors = {},
+}: {
+  value: CalculatorInput;
+  onChange: (v: CalculatorInput) => void;
+  errors?: FieldErrors<keyof CalculatorInput>;
+}) {
   return (
     <div className="space-y-4">
       {sections.map((s) => (
@@ -43,6 +48,11 @@ export default function InputPanel({
                 label={f.label}
                 unit={f.unit}
                 step={f.step}
+                // Bounds come from the same specs the validator uses, so the
+                // browser's own constraint UI and our messages can't drift.
+                min={CALCULATOR_FIELD_SPECS[f.key].min}
+                max={CALCULATOR_FIELD_SPECS[f.key].max}
+                error={errors[f.key]}
                 value={value[f.key]}
                 onChange={(v) => onChange({ ...value, [f.key]: v })}
               />

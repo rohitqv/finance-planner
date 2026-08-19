@@ -39,7 +39,10 @@ html.dark {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Geist is loaded in app/layout.tsx, which exposes it as --font-geist-sans.
+     A hardcoded Arial stack here used to shadow it, so the font was
+     downloaded on every page load and then never actually rendered. */
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
 /* Hide native number-input steppers so field heights stay consistent

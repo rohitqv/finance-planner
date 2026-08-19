@@ -63,25 +63,18 @@ function PrimaryCard({ c, action }: { c: Card; action?: ReactNode }) {
   );
 }
 
+// Renders a computed result only. Inputs that can't produce one (ages out of
+// order, an empty field) never reach here: RetirementTab validates first and
+// renders a ValidationSummary in this component's place, which is why the
+// old `invalidLifespan` escape hatch is gone.
 export default function RetirementResults({
-  result, invalidLifespan, action,
+  result, action,
 }: {
   result: RetirementResult;
-  invalidLifespan?: boolean;
   // Optional next-step CTA rendered inside the primary Shortfall/Surplus card
   // (e.g. the "Plan this in Calculator" handoff button).
   action?: ReactNode;
 }) {
-  if (invalidLifespan) {
-    return (
-      <div className="rounded-xl border border-red-400 bg-red-50 p-4 shadow-sm text-sm text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-300">
-        Lifespan must be greater than retirement age. The ₹0 corpus and SIP
-        figures a plan like this would otherwise show are not real results —
-        adjust the ages to see the actual numbers.
-      </div>
-    );
-  }
-
   const target: Card[] = [
     { label: "Corpus needed (at retirement)", value: formatINR(result.corpusNeededAtRetirement) },
     { label: "Corpus target (today's value)", value: formatINR(result.corpusNeededToday) },

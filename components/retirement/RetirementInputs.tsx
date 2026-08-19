@@ -3,9 +3,12 @@ import type { RetirementInput } from "@/lib/finance/retirement";
 import AssetClassTable from "./AssetClassTable";
 import NumberField, { type NumberUnit } from "@/components/ui/NumberField";
 import InfoTip from "@/components/InfoTip";
+import {
+  RETIREMENT_FIELD_SPECS, type FieldErrors, type RetirementNumericKey,
+} from "@/lib/finance/validation";
 
 type Field = {
-  key: keyof RetirementInput;
+  key: RetirementNumericKey;
   label: string;
   unit?: NumberUnit;
   hint?: string;
@@ -33,19 +36,29 @@ const sections: { title: string; fields: Field[] }[] = [
         hint: "Applied as one blended rate to your whole retirement corpus during drawdown, regardless of which asset classes funded it. Ignored when bucket strategy is on, below.",
       },
       { key: "currentMonthlyInvestment", label: "Current monthly investment", unit: "₹" },
+      {
+        key: "sipStepUpPct",
+        label: "Annual SIP step-up",
+        unit: "%",
+        hint: "Raises both your current monthly investment and the required SIP once a year — most people increase their SIP with their salary. The required SIP shown is the starting month's amount.",
+      },
     ],
   },
 ];
 
-const bucketFields: { key: keyof RetirementInput; label: string; unit?: NumberUnit }[] = [
+const bucketFields: { key: RetirementNumericKey; label: string; unit?: NumberUnit }[] = [
   { key: "bucketYears", label: "Years of expense kept safe" },
   { key: "safeBucketRatePct", label: "Safe bucket rate", unit: "%" },
   { key: "growthBucketRatePct", label: "Growth bucket rate", unit: "%" },
 ];
 
 export default function RetirementInputs({
-  value, onChange,
-}: { value: RetirementInput; onChange: (v: RetirementInput) => void }) {
+  value, onChange, errors = {},
+}: {
+  value: RetirementInput;
+  onChange: (v: RetirementInput) => void;
+  errors?: FieldErrors<RetirementNumericKey>;
+}) {
   return (
     <div className="space-y-4">
       {sections.map((s) => (
@@ -63,7 +76,12 @@ export default function RetirementInputs({
                 label={f.label}
                 unit={f.unit}
                 hint={f.hint}
-                value={value[f.key] as number}
+                // Bounds come from the same specs the validator uses, so the
+                // browser's own constraint UI and our messages can't drift.
+                min={RETIREMENT_FIELD_SPECS[f.key].min}
+                max={RETIREMENT_FIELD_SPECS[f.key].max}
+                error={errors[f.key]}
+                value={value[f.key]}
                 onChange={(v) => onChange({ ...value, [f.key]: v })}
               />
             ))}
@@ -91,7 +109,10 @@ export default function RetirementInputs({
                 key={f.key}
                 label={f.label}
                 unit={f.unit}
-                value={value[f.key] as number}
+                min={RETIREMENT_FIELD_SPECS[f.key].min}
+                max={RETIREMENT_FIELD_SPECS[f.key].max}
+                error={errors[f.key]}
+                value={value[f.key]}
                 onChange={(v) => onChange({ ...value, [f.key]: v })}
               />
             ))}

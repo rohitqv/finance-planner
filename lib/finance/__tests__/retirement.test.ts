@@ -3,6 +3,7 @@ import {
   computeRetirement, computeAccumulationSplit, requiredSip,
   includedCorpusFutureValue, includedCorpusAmount,
   simulateBucketDrawdown, isBucketDrawdown, solveBucketCorpusNeeded,
+  simulateDrawdown, firstDepletionAge,
   DEFAULT_ASSET_CLASSES, type RetirementInput, type AssetClass,
 } from "@/lib/finance/retirement";
 import { accumulate } from "@/lib/finance/accumulation";
@@ -17,7 +18,7 @@ const base: RetirementInput = {
   currentAge: 30, retirementAge: 55, lifespanAge: 85,
   currentMonthlyExpense: 50_000, inflationPct: 6,
   preReturnPct: 12, postReturnPct: 8,
-  phases: [], assetClasses: DEFAULT_ASSET_CLASSES, currentMonthlyInvestment: 0,
+  phases: [], assetClasses: DEFAULT_ASSET_CLASSES, currentMonthlyInvestment: 0, sipStepUpPct: 0,
   useBucketStrategy: false, bucketYears: 5, safeBucketRatePct: 7, growthBucketRatePct: 11,
 };
 
@@ -393,5 +394,141 @@ describe("computeRetirement — bucket strategy mode", () => {
       annualReturn: bucketInput.preReturnPct, years: accumYears, inflationPct: 0,
     }).futureValue;
     expect(grownCorpus + sipFv).toBeCloseTo(r.corpusNeededAtRetirement, -1);
+  });
+});
+
+describe("simulateDrawdown", () => {
+  it("funds every year with no shortfall when started from the required corpus", () => {
+    const result = computeRetirement(base, 2026);
+    const rows = simulateDrawdown(base, result.corpusNeededAtRetirement, 2026);
+    expect(rows.every((r) => r.shortfall === 0)).toBe(true);
+    expect(rows[rows.length - 1].corpusBalance).toBeCloseTo(0, -2);
+  });
+
+  it("never carries a negative balance forward when the corpus runs dry", () => {
+    const rows = simulateDrawdown(base, 1_000_000, 2026);
+    expect(rows.every((r) => r.corpusBalance >= 0)).toBe(true);
+  });
+
+  // A too-small corpus must run out *earlier*, never later — the previous
+  // inline loop compounded a negative balance, which is not a thing money does.
+  it("depletes earlier the smaller the starting corpus", () => {
+    const early = firstDepletionAge(simulateDrawdown(base, 5_000_000, 2026));
+    const later = firstDepletionAge(simulateDrawdown(base, 20_000_000, 2026));
+    expect(early).not.toBeNull();
+    expect(later).not.toBeNull();
+    expect(early as number).toBeLessThan(later as number);
+  });
+
+  it("reports the unfunded part of the first year it cannot cover", () => {
+    const rows = simulateDrawdown(base, 0, 2026);
+    expect(rows[0].shortfall).toBeCloseTo(rows[0].annualExpenseInflated, 0);
+    expect(rows[0].age).toBe(base.retirementAge);
+  });
+
+  it("labels years from the injected `nowYear` rather than the wall clock", () => {
+    const rows = simulateDrawdown(base, 10_000_000, 2000);
+    expect(rows[0].year).toBe(2000 + (base.retirementAge - base.currentAge));
+  });
+});
+
+describe("firstDepletionAge", () => {
+  it("returns null when every year is funded", () => {
+    const result = computeRetirement(base, 2026);
+    expect(firstDepletionAge(simulateDrawdown(base, result.corpusNeededAtRetirement, 2026))).toBeNull();
+  });
+
+  it("returns the first underfunded age, not the last", () => {
+    const rows = simulateDrawdown(base, 5_000_000, 2026);
+    const depletion = firstDepletionAge(rows);
+    const firstBad = rows.find((r) => r.shortfall > 0);
+    expect(depletion).toBe(firstBad?.age);
+  });
+});
+
+describe("computeRetirement projected drawdown", () => {
+  it("runs the projected drawdown from the corpus the user is on track for", () => {
+    const plan = { ...base, assetClasses: corpusOf(2_000_000), currentMonthlyInvestment: 10_000 };
+    const result = computeRetirement(plan, 2026);
+    const expected = simulateDrawdown(plan, result.projectedCorpusFromCurrentPlan, 2026);
+    expect(result.projectedDrawdown).toEqual(expected);
+  });
+
+  // The required-corpus drawdown is solved to end at exactly zero, so on its
+  // own it can never show an underfunded plan running out. This is the whole
+  // point of the second series.
+  it("shows a depletion age for an underfunded plan while the required drawdown does not", () => {
+    const underfunded = { ...base, currentMonthlyInvestment: 1_000 };
+    const result = computeRetirement(underfunded, 2026);
+    expect(result.gap).toBeGreaterThan(0);
+    expect(result.projectedDepletionAge).not.toBeNull();
+    expect(firstDepletionAge(result.drawdown)).toBeNull();
+  });
+
+  it("reports no depletion when the current plan already covers the target", () => {
+    const funded = { ...base, assetClasses: corpusOf(50_000_000), currentMonthlyInvestment: 100_000 };
+    const result = computeRetirement(funded, 2026);
+    expect(result.gap).toBeLessThan(0);
+    expect(result.projectedDepletionAge).toBeNull();
+  });
+
+  it("uses the bucket simulation for the projection when the bucket strategy is on", () => {
+    const plan = { ...base, useBucketStrategy: true, currentMonthlyInvestment: 20_000 };
+    const result = computeRetirement(plan, 2026);
+    expect(isBucketDrawdown(result.projectedDrawdown)).toBe(true);
+  });
+
+  it("puts the depletion age inside the retirement window", () => {
+    const plan = { ...base, currentMonthlyInvestment: 5_000 };
+    const age = computeRetirement(plan, 2026).projectedDepletionAge as number;
+    expect(age).toBeGreaterThanOrEqual(plan.retirementAge);
+    expect(age).toBeLessThanOrEqual(plan.lifespanAge);
+  });
+});
+
+describe("step-up SIP", () => {
+  it("solves a starting SIP that still reaches the target once stepped up", () => {
+    const sip = requiredSip(10_000_000, 25, 12, 0, 5);
+    const fv = accumulate({
+      lumpsum: 0, monthlySip: sip, stepUpPct: 5,
+      annualReturn: 12, years: 25, inflationPct: 0,
+    }).futureValue;
+    expect(fv).toBeCloseTo(10_000_000, 0);
+  });
+
+  it("needs a smaller starting SIP than the flat equivalent", () => {
+    const flat = requiredSip(10_000_000, 25, 12, 0, 0);
+    const stepped = requiredSip(10_000_000, 25, 12, 0, 5);
+    expect(stepped).toBeLessThan(flat);
+  });
+
+  it("lowers the required monthly SIP for the same plan", () => {
+    const flat = computeRetirement({ ...base, sipStepUpPct: 0 }, 2026);
+    const stepped = computeRetirement({ ...base, sipStepUpPct: 5 }, 2026);
+    expect(stepped.requiredMonthlySip).toBeLessThan(flat.requiredMonthlySip);
+    // The corpus target itself is a drawdown-side figure — how it is funded
+    // must not move it.
+    expect(stepped.corpusNeededAtRetirement).toBeCloseTo(flat.corpusNeededAtRetirement, 6);
+  });
+
+  it("steps up the existing contribution too, so the gap does not widen spuriously", () => {
+    const plan = { ...base, currentMonthlyInvestment: 20_000 };
+    const flat = computeRetirement({ ...plan, sipStepUpPct: 0 }, 2026);
+    const stepped = computeRetirement({ ...plan, sipStepUpPct: 5 }, 2026);
+    expect(stepped.projectedCorpusFromCurrentPlan).toBeGreaterThan(flat.projectedCorpusFromCurrentPlan);
+    expect(stepped.gap).toBeLessThan(flat.gap);
+  });
+
+  // A step-up of 0 is the default, so every plan saved before this shipped
+  // must keep producing exactly the numbers its owner last saw.
+  it("is a no-op at 0", () => {
+    const withField = computeRetirement({ ...base, sipStepUpPct: 0 }, 2026);
+    expect(withField.requiredMonthlySip).toBeCloseTo(
+      requiredSip(
+        withField.corpusNeededAtRetirement, 25, base.preReturnPct,
+        includedCorpusFutureValue(base.assetClasses, 25),
+      ),
+      6,
+    );
   });
 });

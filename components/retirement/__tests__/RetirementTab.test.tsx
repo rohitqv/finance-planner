@@ -47,17 +47,18 @@ describe("RetirementTab", () => {
     expect(arg.lumpsum).toBe(100000);
   });
 
-  it("disables the handoff button (and does not call onHandoff) when retirement age <= current age", () => {
+  it("removes the handoff button (and does not call onHandoff) when retirement age <= current age", () => {
     const onHandoff = vi.fn();
     render(<RetirementTab onHandoff={onHandoff} />);
     // Default currentAge is 30; setting retirementAge to the same value
     // leaves zero years to accumulate, so requiredMonthlySip is an explicit
     // Infinity (lib/finance/retirement.ts) that must never reach the
-    // Calculator tab.
+    // Calculator tab. The plan no longer validates at all, so the results
+    // panel — and with it the handoff button — is replaced by the summary,
+    // a stronger guarantee than the disabled button this used to assert.
     fireEvent.change(screen.getByLabelText(/retirement age/i), { target: { value: "30" } });
-    const button = screen.getByRole("button", { name: /plan this in calculator/i });
-    expect(button).toBeDisabled();
-    fireEvent.click(button);
+    expect(screen.queryByRole("button", { name: /plan this in calculator/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/retirement age must be greater than current age/i)).toBeInTheDocument();
     expect(onHandoff).not.toHaveBeenCalled();
   });
 
@@ -69,5 +70,48 @@ describe("RetirementTab", () => {
     // table further down, so assert on a metric that's unique to the
     // RetirementResults card grid this warning replaces.
     expect(screen.queryByText(/extra sip to close gap/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("RetirementTab drawdown views", () => {
+  // Default currentMonthlyInvestment is 0, so the projected corpus is 0 and
+  // the very first retirement year is already unfunded.
+  it("opens on the user's own projection, not the required-corpus curve", () => {
+    render(<RetirementTab />);
+    expect(screen.getByRole("button", { name: /your projection/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /required corpus/i })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("names the age the projected corpus runs out", () => {
+    render(<RetirementTab />);
+    fireEvent.change(screen.getByLabelText(/current monthly investment/i), { target: { value: "25000" } });
+    expect(screen.getByText(/runs out at age/i)).toBeInTheDocument();
+  });
+
+  it("says so plainly when the projection covers the whole retirement", () => {
+    render(<RetirementTab />);
+    fireEvent.change(screen.getByLabelText(/current monthly investment/i), { target: { value: "500000" } });
+    expect(screen.getByText(/funds every year through age/i)).toBeInTheDocument();
+    expect(screen.queryByText(/runs out at age/i)).not.toBeInTheDocument();
+  });
+
+  it("switches the year-by-year table between the two corpora", () => {
+    render(<RetirementTab />);
+    expect(screen.getByText(/year-by-year drawdown — your projection/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /required corpus/i }));
+    expect(screen.getByText(/year-by-year drawdown — required corpus/i)).toBeInTheDocument();
+  });
+
+  // The required corpus is solved to fund every year, so a shortfall column
+  // there would be a column of dashes; the projection is where it matters.
+  it("shows a shortfall column only for a projection that falls short", () => {
+    render(<RetirementTab />);
+    fireEvent.change(screen.getByLabelText(/current monthly investment/i), { target: { value: "25000" } });
+    fireEvent.click(screen.getByRole("button", { name: /show year-by-year drawdown/i }));
+    expect(screen.getByRole("columnheader", { name: /shortfall/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /required corpus/i }));
+    expect(screen.queryByRole("columnheader", { name: /shortfall/i })).not.toBeInTheDocument();
   });
 });

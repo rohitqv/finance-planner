@@ -126,3 +126,46 @@ describe("CalculatorTab", () => {
     });
   });
 });
+
+describe("CalculatorTab validation", () => {
+  it("replaces the results with a summary instead of computing on an empty field", () => {
+    render(<CalculatorTab />);
+    fireEvent.change(screen.getByLabelText(/duration/i), { target: { value: "" } });
+
+    expect(screen.queryByText(/future value/i)).not.toBeInTheDocument();
+    // Two alerts are expected: the inline message on the field itself, and
+    // this labelled line in the summary that took the results' place.
+    expect(screen.getByText(/Duration \(years\): Enter a number/)).toBeInTheDocument();
+  });
+
+  it("flags an out-of-range field inline and names it in the summary", () => {
+    render(<CalculatorTab />);
+    fireEvent.change(screen.getByLabelText(/expected annual return/i), { target: { value: "150" } });
+
+    const input = screen.getByLabelText(/expected annual return/i);
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText(/Expected annual return: Must be at most 100/)).toBeInTheDocument();
+  });
+
+  it("refuses to save a scenario built from invalid inputs", () => {
+    render(<CalculatorTab />);
+    fireEvent.change(screen.getByLabelText(/scenario name/i), { target: { value: "Broken" } });
+    fireEvent.change(screen.getByLabelText(/duration/i), { target: { value: "0" } });
+
+    const save = screen.getByRole("button", { name: /save scenario/i });
+    expect(save).toBeDisabled();
+    fireEvent.click(save);
+    expect(loadScenarios()).toHaveLength(0);
+  });
+
+  it("recovers once the field is valid again", () => {
+    render(<CalculatorTab />);
+    const years = screen.getByLabelText(/duration/i);
+    fireEvent.change(years, { target: { value: "" } });
+    expect(screen.queryByText(/future value/i)).not.toBeInTheDocument();
+
+    fireEvent.change(years, { target: { value: "20" } });
+    expect(screen.getByText(/future value/i)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});

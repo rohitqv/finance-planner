@@ -4,33 +4,22 @@ import InputPanel from "./InputPanel";
 import ResultCards from "./ResultCards";
 import GrowthChart from "./GrowthChart";
 import ScenarioTable from "./ScenarioTable";
+import ValidationSummary from "@/components/ui/ValidationSummary";
 import { calculate, calculateSeries } from "@/lib/finance/calculate";
+import {
+  CALCULATOR_FIELD_SPECS, summarizeValidation, validateCalculatorInput,
+} from "@/lib/finance/validation";
 import type { CalculatorInput } from "@/lib/finance/types";
+import { sanitizeCalculatorInput } from "@/lib/finance/sanitize";
 import {
   addScenario, deleteScenario, duplicateScenario, loadScenarios, updateScenario, type Scenario,
 } from "@/store/scenarios";
 
-const DEFAULT: CalculatorInput = {
-  lumpsum: 0, monthlySip: 10000, stepUpPct: 0,
-  annualReturn: 12, years: 15, inflationPct: 6,
-};
-
 // `initial` crosses an external prop boundary (it's the retirement-handoff
-// payload, ultimately built from `Number(...)` on user-editable form fields
-// upstream). Only accept finite numbers for each CalculatorInput field;
-// anything else (Infinity, NaN, missing) falls back to DEFAULT rather than
-// leaking into a <input type="number"> value or downstream FV/CAGR math.
-function sanitizeInitial(initial?: Partial<CalculatorInput>): Partial<CalculatorInput> {
-  const out: Partial<CalculatorInput> = {};
-  if (!initial) return out;
-  for (const key of Object.keys(DEFAULT) as (keyof CalculatorInput)[]) {
-    const v = initial[key];
-    if (typeof v === "number" && Number.isFinite(v)) {
-      out[key] = v;
-    }
-  }
-  return out;
-}
+// payload, ultimately built from user-editable form fields upstream), so it
+// gets the same treatment as anything read back from storage: every field
+// that isn't a finite number falls back to the documented default rather
+// than leaking Infinity/NaN into an <input> or into the FV/CAGR math.
 
 // `corpusGoal` isn't part of `CalculatorInput`, so it doesn't go through
 // `sanitizeInitial` above — but it crosses the same external prop boundary
@@ -48,7 +37,7 @@ export default function CalculatorTab({ initial }: { initial?: Partial<Calculato
   // RetirementTab, never both, so switching tabs is a full unmount/mount),
   // so a prop-sync effect isn't needed to react to a changing `initial`
   // after mount.
-  const [input, setInput] = useState<CalculatorInput>(() => ({ ...DEFAULT, ...sanitizeInitial(initial) }));
+  const [input, setInput] = useState<CalculatorInput>(() => sanitizeCalculatorInput(initial));
   const [name, setName] = useState("");
   const [goal, setGoal] = useState<number | undefined>(sanitizeGoal(initial?.corpusGoal));
   // Unlike `input`/`goal` above, `scenarios` can't use a lazy initializer:
@@ -67,13 +56,28 @@ export default function CalculatorTab({ initial }: { initial?: Partial<Calculato
     setScenarios(loadScenarios());
   }, []);
 
-  const result = useMemo(() => calculate(input), [input]);
-  const series = useMemo(() => calculateSeries(input), [input]);
+  // Validation gates the math rather than running alongside it: calculate()
+  // on a NaN or out-of-range input yields NaN/Infinity figures that render
+  // as authoritative-looking rubbish, so an invalid plan produces no result
+  // at all and the summary takes the results panel's place.
+  const validation = useMemo(() => validateCalculatorInput(input), [input]);
+  const problems = useMemo(
+    () => summarizeValidation(validation, CALCULATOR_FIELD_SPECS),
+    [validation],
+  );
+  const result = useMemo(
+    () => (validation.ok ? calculate(input) : null),
+    [input, validation.ok],
+  );
+  const series = useMemo(
+    () => (validation.ok ? calculateSeries(input) : []),
+    [input, validation.ok],
+  );
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div>
-        <InputPanel value={input} onChange={setInput} />
+        <InputPanel value={input} onChange={setInput} errors={validation.fields} />
         <div className="mt-4 flex gap-2">
           <input
             aria-label="Scenario name"
@@ -83,9 +87,11 @@ export default function CalculatorTab({ initial }: { initial?: Partial<Calculato
             onChange={(e) => setName(e.target.value)}
           />
           <button
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!validation.ok}
+            title={validation.ok ? undefined : "Fix the highlighted inputs before saving."}
             onClick={() => {
-              if (!name.trim()) return;
+              if (!name.trim() || !validation.ok) return;
               setScenarios(addScenario({ ...input, name: name.trim(), corpusGoal: goal }));
               setName("");
               setSelectedScenarioId(null);
@@ -95,8 +101,11 @@ export default function CalculatorTab({ initial }: { initial?: Partial<Calculato
           </button>
           {selectedScenarioId && (
             <button
-              className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
+              className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!validation.ok}
+              title={validation.ok ? undefined : "Fix the highlighted inputs before saving."}
               onClick={() => {
+                if (!validation.ok) return;
                 const patch: Partial<Scenario> = { ...input, corpusGoal: goal };
                 if (name.trim()) patch.name = name.trim();
                 setScenarios(updateScenario(selectedScenarioId, patch));
@@ -108,8 +117,14 @@ export default function CalculatorTab({ initial }: { initial?: Partial<Calculato
         </div>
       </div>
       <div className="space-y-4">
-        <ResultCards result={result} />
-        <GrowthChart series={series} goal={goal} />
+        {result ? (
+          <>
+            <ResultCards result={result} />
+            <GrowthChart series={series} goal={goal} />
+          </>
+        ) : (
+          <ValidationSummary messages={problems} />
+        )}
       </div>
       <div className="md:col-span-2">
         <h3 className="mb-2 font-semibold">

@@ -11,6 +11,8 @@ const shortfallResult: RetirementResult = {
   gap: 1_820_000,
   extraSipToCloseGap: 5_000,
   drawdown: [],
+  projectedDrawdown: [],
+  projectedDepletionAge: null,
 };
 
 const surplusResult: RetirementResult = {
@@ -51,10 +53,14 @@ describe("RetirementResults", () => {
     expect(card.className).toContain("border");
   });
 
-  it("still shows the invalid-lifespan message, unaffected by the color-coding change", () => {
-    render(<RetirementResults result={shortfallResult} invalidLifespan />);
-    expect(screen.getByText(/lifespan must be greater/i)).toBeInTheDocument();
-    expect(screen.queryByText("Shortfall")).not.toBeInTheDocument();
+  // The invalid-lifespan escape hatch this component used to own now lives in
+  // the shared validator, and RetirementTab renders a ValidationSummary
+  // instead of this component when a plan doesn't validate. See
+  // RetirementTab.test.tsx for that behaviour end-to-end.
+  it("renders results unconditionally, leaving invalid input to the validator", () => {
+    render(<RetirementResults result={shortfallResult} />);
+    expect(screen.queryByText(/lifespan must be greater/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Shortfall")).toBeInTheDocument();
   });
 
   it("does not apply opacity-70 to the Shortfall/Surplus label", () => {

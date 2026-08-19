@@ -11,7 +11,7 @@ const required: MonthlyPoint[] = [
 describe("AccumulationTable", () => {
   it("shows only Required when there is no surplus", () => {
     render(<AccumulationTable required={required} surplus={null} startAge={30} />);
-    fireEvent.click(screen.getByText("Show year-by-year numbers"));
+    fireEvent.click(screen.getByText("Show year-by-year growth"));
     expect(screen.getByText("31")).toBeInTheDocument();
     expect(screen.getByText("32")).toBeInTheDocument();
     expect(screen.queryByText(/surplus/i)).not.toBeInTheDocument();
@@ -23,7 +23,7 @@ describe("AccumulationTable", () => {
       { month: 24, invested: 400_000, value: 440_000 },
     ];
     render(<AccumulationTable required={required} surplus={surplus} startAge={30} />);
-    fireEvent.click(screen.getByText("Show year-by-year numbers"));
+    fireEvent.click(screen.getByText("Show year-by-year growth"));
     expect(screen.getByText(/surplus/i)).toBeInTheDocument();
     expect(screen.getByText(/total/i)).toBeInTheDocument();
   });
