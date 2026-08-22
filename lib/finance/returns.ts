@@ -1,10 +1,21 @@
 import { buildCashflows, accumulate } from "./accumulation";
 import type { CalculatorInput } from "./types";
 
-export function cagr(futureValue: number, totalInvested: number, years: number): number {
-  if (totalInvested <= 0 || years <= 0) return 0;
-  return Math.pow(futureValue / totalInvested, 1 / years) - 1;
-}
+// There was a `cagr(futureValue, totalInvested, years)` here, computing
+// (FV / invested)^(1/years) - 1, and it was displayed beside XIRR as a peer
+// "return" figure. It is not one, and it is gone deliberately rather than
+// hidden behind a condition:
+//
+//   - For a contribution *stream* the formula is wrong. It divides by the
+//     undiscounted sum of every instalment, as though money paid in year 14
+//     had been compounding since year 0. On this app's default input it
+//     reports 6.63% against a true 12% — two "returns" 5.4pp apart on screen.
+//   - For a lumpsum-only input it is correct, and exactly equal to XIRR
+//     (verified across rates and horizons), so it adds nothing there either.
+//
+// Redundant when right and misleading when wrong, in every case XIRR already
+// covers. What it was gesturing at — how far the money grew — is reported
+// honestly and un-annualized as `growthMultiple` in lib/finance/calculate.ts.
 
 // A cashflow sequence with exactly one sign change (some negative
 // outflows followed by one non-negative inflow, or vice versa) has an
@@ -76,12 +87,11 @@ export function xirrFromCashflows(
   return Math.pow(1 + rate, 12) - 1;
 }
 
-export function computeReturns(input: CalculatorInput): { cagr: number; xirr: number } {
-  const { futureValue, totalInvested } = accumulate(input);
+export function computeReturns(input: CalculatorInput): { xirr: number } {
+  const { futureValue } = accumulate(input);
   const flows = buildCashflows(input);
   const finalMonth = Math.round(input.years * 12);
   return {
-    cagr: cagr(futureValue, totalInvested, input.years),
     xirr: flows.length === 0 ? 0 : xirrFromCashflows(flows, futureValue, finalMonth),
   };
 }

@@ -7,7 +7,7 @@ const positiveResult: CalculatorResult = {
   futureValue: 8_542_000,
   totalInvested: 3_600_000,
   gain: 4_942_000,
-  cagr: 0.142,
+  growthMultiple: 2.3728,
   xirr: 0.138,
   inflationAdjustedFV: 6_210_000,
 };
@@ -16,13 +16,13 @@ const negativeResult: CalculatorResult = {
   futureValue: 900_000,
   totalInvested: 1_000_000,
   gain: -100_000,
-  cagr: -0.02,
+  growthMultiple: 0.9,
   xirr: -0.015,
   inflationAdjustedFV: 850_000,
 };
 
 function cardFor(label: string) {
-  return screen.getByText(label).parentElement as HTMLElement;
+  return screen.getByText(label).closest("[data-card]") as HTMLElement;
 }
 
 describe("ResultCards", () => {
@@ -43,12 +43,42 @@ describe("ResultCards", () => {
     expect(within(card).queryByText(/₹-/)).not.toBeInTheDocument();
   });
 
-  it("colors CAGR and XIRR the same way as Gain", () => {
+  it("colors XIRR the same way as Gain", () => {
     render(<ResultCards result={negativeResult} />);
-    expect(cardFor("CAGR").className).toContain("bg-red-50");
     expect(cardFor("XIRR").className).toContain("bg-red-50");
-    expect(within(cardFor("CAGR")).getByText("2.00%")).toBeInTheDocument();
     expect(within(cardFor("XIRR")).getByText("1.50%")).toBeInTheDocument();
+  });
+
+  // CAGR was displayed beside XIRR as a peer "return" figure and reported
+  // 6.63% where XIRR reported 12.00% on the app's own default input. It is
+  // gone; see the note in lib/finance/returns.ts.
+  it("does not show a CAGR figure anywhere", () => {
+    render(<ResultCards result={positiveResult} />);
+    expect(screen.queryByText(/CAGR/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the growth multiple, uncolored and with no direction arrow", () => {
+    render(<ResultCards result={positiveResult} />);
+    const card = cardFor("Growth Multiple");
+    expect(within(card).getByText("2.37x")).toBeInTheDocument();
+    expect(card.className).not.toContain("bg-green-50");
+    expect(card.className).not.toContain("bg-red-50");
+    expect(within(card).queryByText("▲")).not.toBeInTheDocument();
+  });
+
+  it("leaves the multiple uncolored even when the money shrank", () => {
+    render(<ResultCards result={negativeResult} />);
+    const card = cardFor("Growth Multiple");
+    expect(within(card).getByText("0.90x")).toBeInTheDocument();
+    expect(card.className).not.toContain("bg-red-50");
+  });
+
+  it("explains the two return-flavoured cards with an info tip", () => {
+    render(<ResultCards result={positiveResult} />);
+    expect(within(cardFor("XIRR")).getByLabelText("About XIRR")).toBeInTheDocument();
+    expect(
+      within(cardFor("Growth Multiple")).getByLabelText("About Growth Multiple"),
+    ).toBeInTheDocument();
   });
 
   it("leaves neutral cards (Future Value, Total Invested, Inflation-adjusted FV) uncolored", () => {

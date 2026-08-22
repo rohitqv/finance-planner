@@ -17,7 +17,10 @@ export default function InfoTip({
       </button>
       <span
         role="tooltip"
-        className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-60 -translate-x-1/2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-normal leading-relaxed text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
+        // `normal-case` is load-bearing: tips are placed beside labels that
+        // are often `uppercase` (result-card headings, table headers), and the
+        // tooltip inherits that, rendering a whole sentence in caps.
+        className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-60 -translate-x-1/2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-normal normal-case leading-relaxed text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
       >
         {text}
       </span>

@@ -7,6 +7,12 @@ export function formatPct(fraction: number, dp = 2): string {
   return (fraction * 100).toFixed(dp) + "%";
 }
 
+// A growth ratio, e.g. 2.62 -> "2.62x". Not a percentage and not annualized
+// — see the note on `growthMultiple` in lib/finance/types.ts.
+export function formatMultiple(ratio: number, dp = 2): string {
+  return ratio.toFixed(dp) + "x";
+}
+
 export function formatNumber(n: number): string {
   return Math.round(n).toLocaleString("en-IN");
 }

@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { formatINR, formatPct, formatCompactINR } from "@/lib/finance/format";
+import {
+  formatINR, formatMultiple, formatPct, formatCompactINR,
+} from "@/lib/finance/format";
 
 describe("formatINR", () => {
   it("groups in the Indian system", () => {
@@ -33,5 +35,17 @@ describe("formatPct", () => {
   });
   it("respects decimal places", () => {
     expect(formatPct(0.12, 0)).toBe("12%");
+  });
+});
+
+describe("formatMultiple", () => {
+  it("renders a ratio with an x suffix", () => {
+    expect(formatMultiple(2.6192)).toBe("2.62x");
+  });
+  it("keeps trailing zeros so a column of multiples stays aligned", () => {
+    expect(formatMultiple(3)).toBe("3.00x");
+  });
+  it("respects decimal places", () => {
+    expect(formatMultiple(2.6192, 1)).toBe("2.6x");
   });
 });

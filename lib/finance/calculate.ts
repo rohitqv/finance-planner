@@ -5,12 +5,15 @@ import type { CalculatorInput, CalculatorResult, MonthlyPoint } from "./types";
 
 export function calculate(input: CalculatorInput): CalculatorResult {
   const { futureValue, totalInvested } = accumulate(input);
-  const { cagr, xirr } = computeReturns(input);
+  const { xirr } = computeReturns(input);
   return {
     futureValue,
     totalInvested,
     gain: futureValue - totalInvested,
-    cagr,
+    // 0, not Infinity/NaN, when nothing was invested: the UI gates on
+    // validation, but ScenarioTable calls calculate() directly on stored
+    // rows, which can legitimately be all-zero.
+    growthMultiple: totalInvested > 0 ? futureValue / totalInvested : 0,
     xirr,
     inflationAdjustedFV: realValue(futureValue, input.inflationPct, input.years),
   };

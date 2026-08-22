@@ -1,7 +1,7 @@
 "use client";
 import type { Scenario } from "@/store/scenarios";
 import { calculate } from "@/lib/finance/calculate";
-import { formatINR, formatPct } from "@/lib/finance/format";
+import { formatINR, formatMultiple, formatPct } from "@/lib/finance/format";
 
 export default function ScenarioTable({
   scenarios, onDelete, onDuplicate, onLoad,
@@ -19,7 +19,8 @@ export default function ScenarioTable({
           <tr className="border-b bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
             <th className="px-3 py-2">Name</th>
             <th className="px-3 py-2">FV</th>
-            <th className="px-3 py-2">CAGR</th>
+            {/* Growth multiple, not CAGR — see the note in lib/finance/returns.ts. */}
+            <th className="px-3 py-2">Multiple</th>
             <th className="px-3 py-2">XIRR</th>
             <th className="px-3 py-2"></th>
           </tr>
@@ -41,7 +42,7 @@ export default function ScenarioTable({
                   </div>
                 </td>
                 <td className="px-3 py-2 tabular-nums">{formatINR(r.futureValue)}</td>
-                <td className="px-3 py-2 tabular-nums">{formatPct(r.cagr)}</td>
+                <td className="px-3 py-2 tabular-nums">{formatMultiple(r.growthMultiple)}</td>
                 <td className="px-3 py-2 tabular-nums">{formatPct(r.xirr)}</td>
                 <td className="space-x-3 px-3 py-2 text-right">
                   <button className="text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200" onClick={() => onDuplicate(s.id)}>
