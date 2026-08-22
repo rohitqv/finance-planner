@@ -75,9 +75,88 @@ describe("sanitizeAssetClasses", () => {
     expect(gold).toMatchObject({ amount: 250000, ratePct: 9, includeInRetirement: false });
   });
 
-  it("ignores a key that is no longer part of the fixed set", () => {
-    const result = sanitizeAssetClasses([{ key: "crypto", amount: 1, ratePct: 1 }]);
-    expect(result.map((a) => a.key)).toEqual(DEFAULT_RETIREMENT_INPUT.assetClasses.map((a) => a.key));
+  // Inverted deliberately. This used to assert that an unrecognized key was
+  // discarded, which meant a plan written by a newer build — or an imported
+  // backup carrying an asset this build predates — lost that balance silently
+  // on load, with no error and no way to get it back. Keys are open now.
+  it("preserves an unrecognized key instead of discarding its balance", () => {
+    const result = sanitizeAssetClasses([{ key: "nps", label: "NPS", amount: 450000, ratePct: 10 }]);
+    const nps = result.find((a) => a.key === "nps");
+    expect(nps).toMatchObject({ key: "nps", label: "NPS", amount: 450000, ratePct: 10 });
+  });
+
+  it("keeps every built-in class alongside an unrecognized one", () => {
+    const result = sanitizeAssetClasses([{ key: "nps", label: "NPS", amount: 1, ratePct: 1 }]);
+    for (const def of DEFAULT_RETIREMENT_INPUT.assetClasses) {
+      expect(result.map((a) => a.key)).toContain(def.key);
+    }
+  });
+
+  it("orders built-in classes first, in declared order, with unknowns appended", () => {
+    const result = sanitizeAssetClasses([
+      { key: "ppf", label: "PPF", amount: 1, ratePct: 7.1 },
+      { key: "gold", amount: 5, ratePct: 8 },
+      { key: "nps", label: "NPS", amount: 2, ratePct: 10 },
+    ]);
+    const defaultKeys = DEFAULT_RETIREMENT_INPUT.assetClasses.map((a) => a.key);
+    expect(result.map((a) => a.key)).toEqual([...defaultKeys, "ppf", "nps"]);
+  });
+
+  // label is persisted data now: an unrecognized key has no entry in
+  // DEFAULT_ASSET_CLASSES to recover a display name from.
+  it("falls back to the key as the label when an unrecognized class has none", () => {
+    const result = sanitizeAssetClasses([{ key: "nps", amount: 1, ratePct: 1 }]);
+    expect(result.find((a) => a.key === "nps")?.label).toBe("nps");
+  });
+
+  it("falls back to the key as the label when the saved label is blank", () => {
+    const result = sanitizeAssetClasses([{ key: "nps", label: "   ", amount: 1, ratePct: 1 }]);
+    expect(result.find((a) => a.key === "nps")?.label).toBe("nps");
+  });
+
+  it("includes an unrecognized class in retirement when the flag is absent", () => {
+    const result = sanitizeAssetClasses([{ key: "nps", amount: 1, ratePct: 1 }]);
+    expect(result.find((a) => a.key === "nps")?.includeInRetirement).toBe(true);
+  });
+
+  it("honors a saved exclusion on an unrecognized class", () => {
+    const result = sanitizeAssetClasses([
+      { key: "nps", amount: 1, ratePct: 1, includeInRetirement: false },
+    ]);
+    expect(result.find((a) => a.key === "nps")?.includeInRetirement).toBe(false);
+  });
+
+  it("repairs a broken amount and rate on an unrecognized class", () => {
+    const result = sanitizeAssetClasses([{ key: "nps", amount: null, ratePct: "eight" }]);
+    expect(result.find((a) => a.key === "nps")).toMatchObject({ amount: 0, ratePct: 0 });
+  });
+
+  // Two rows sharing a key would break AssetClassTable, which uses `key` as
+  // both the React key and the edit identity — one keystroke would patch both
+  // rows — and would double-count the balance in includedCorpusAmount.
+  it("drops a duplicate key, keeping the first occurrence", () => {
+    const result = sanitizeAssetClasses([
+      { key: "gold", amount: 100, ratePct: 8 },
+      { key: "gold", amount: 999, ratePct: 3 },
+    ]);
+    expect(result.filter((a) => a.key === "gold")).toHaveLength(1);
+    expect(result.find((a) => a.key === "gold")?.amount).toBe(100);
+  });
+
+  it("drops a duplicate unrecognized key, keeping the first occurrence", () => {
+    const result = sanitizeAssetClasses([
+      { key: "nps", label: "NPS", amount: 100, ratePct: 10 },
+      { key: "nps", label: "NPS again", amount: 999, ratePct: 3 },
+    ]);
+    expect(result.filter((a) => a.key === "nps")).toHaveLength(1);
+    expect(result.find((a) => a.key === "nps")?.amount).toBe(100);
+  });
+
+  it("drops a row whose key is missing or not a string", () => {
+    const result = sanitizeAssetClasses([{ amount: 1, ratePct: 1 }, { key: 7, amount: 2 }]);
+    expect(result.map((a) => a.key)).toEqual(
+      DEFAULT_RETIREMENT_INPUT.assetClasses.map((a) => a.key),
+    );
   });
 
   it("repairs a broken amount without discarding the rest of the class", () => {

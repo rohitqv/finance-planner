@@ -32,28 +32,65 @@ export function sanitizePhases(raw: unknown): ExpensePhase[] {
   }));
 }
 
-// Reconciles saved asset classes against the current fixed set: keeps each
-// saved entry whose key is still known (with its numbers checked), and fills
-// in any class that didn't exist when the plan was saved with its default.
-// The fixed set can therefore grow without discarding a user's amounts.
+// One saved row merged onto a base. `base` is the built-in default for a
+// known key, or a neutral placeholder for a key this build has never heard of
+// — an unknown asset with an unreadable rate is worth 0% rather than being
+// credited with invented growth.
+function shapeAssetClass(
+  key: string, base: Omit<AssetClass, "key">, saved: Record<string, unknown> | undefined,
+): AssetClass {
+  if (!saved) return { key, ...base };
+  const savedLabel = typeof saved.label === "string" ? saved.label.trim() : "";
+  return {
+    key,
+    label: savedLabel === "" ? base.label : savedLabel,
+    amount: finiteOr(saved.amount, base.amount),
+    ratePct: finiteOr(saved.ratePct, base.ratePct),
+    includeInRetirement: boolOr(saved.includeInRetirement, base.includeInRetirement),
+  };
+}
+
+// Reconciles saved asset classes against the built-in set. Every default is
+// emitted in its declared order, carrying the user's saved values where there
+// are any; then any saved key with no built-in counterpart is appended in the
+// order it was saved.
+//
+// That second pass is the point of the function. It used to map over
+// DEFAULT_ASSET_CLASSES and look saved values up, a shape that structurally
+// could not emit a key outside the built-in five — so an asset written by a
+// newer build, or restored from a backup that predated this one, lost its
+// balance on load with no error and no way to recover it.
 export function sanitizeAssetClasses(raw: unknown): AssetClass[] {
-  const savedArray = Array.isArray(raw) ? raw : [];
-  const byKey = new Map(
-    savedArray
-      .filter(isPlainObject)
-      .filter((a) => typeof a.key === "string")
-      .map((a) => [a.key as string, a]),
-  );
-  return DEFAULT_ASSET_CLASSES.map((def) => {
-    const saved = byKey.get(def.key);
-    if (!saved) return def;
-    return {
-      ...def,
-      amount: finiteOr(saved.amount, def.amount),
-      ratePct: finiteOr(saved.ratePct, def.ratePct),
-      includeInRetirement: boolOr(saved.includeInRetirement, def.includeInRetirement),
-    };
-  });
+  const rows = (Array.isArray(raw) ? raw : [])
+    .filter(isPlainObject)
+    .filter((a) => typeof a.key === "string" && a.key.trim() !== "");
+
+  // First occurrence wins. `new Map(entries)` keeps the *last*, which would
+  // silently prefer a stale duplicate over the row a user most likely edited.
+  // Duplicates matter now that keys are open: AssetClassTable uses `key` as
+  // both its React key and its edit identity, so two rows sharing one would
+  // be patched together by a single keystroke, and includedCorpusAmount would
+  // count the balance twice.
+  const byKey = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    const key = row.key as string;
+    if (!byKey.has(key)) byKey.set(key, row);
+  }
+
+  const builtIn = DEFAULT_ASSET_CLASSES.map(({ key, ...base }) =>
+    shapeAssetClass(key, base, byKey.get(key)));
+
+  const builtInKeys = new Set(DEFAULT_ASSET_CLASSES.map((a) => a.key));
+  const extras: AssetClass[] = [];
+  for (const [key, row] of byKey) {
+    if (builtInKeys.has(key)) continue;
+    // Map iteration is insertion order, so extras keep their saved order.
+    extras.push(shapeAssetClass(
+      key, { label: key, amount: 0, ratePct: 0, includeInRetirement: true }, row,
+    ));
+  }
+
+  return [...builtIn, ...extras];
 }
 
 export function sanitizeRetirementInput(raw: unknown): RetirementInput {

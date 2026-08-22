@@ -3,9 +3,15 @@ import type { MonthlyPoint } from "./types";
 
 export type ExpensePhase = { fromAge: number; toAge: number; monthlyExpenseToday: number };
 
-export type AssetClassKey = "mutualFund" | "gold" | "epfo" | "fixedDeposit" | "realEstate";
+// Open, not an enum. It was a five-member union, which meant the sanitizer
+// could not represent — and therefore silently discarded — any asset this
+// build didn't already know about, including one written by a newer version
+// of the app. The alias is kept because it still documents what the field is
+// at every use site; it just no longer constrains the set.
+export type AssetClassKey = string;
 export type AssetClass = {
   key: AssetClassKey;
+  /** Persisted, not derived: an open key has no built-in entry to read a name from. */
   label: string;
   amount: number;
   ratePct: number;

@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { loadPlan, savePlan } from "@/store/retirementPlan";
-import { DEFAULT_ASSET_CLASSES, type RetirementInput } from "@/lib/finance/retirement";
+import {
+  DEFAULT_ASSET_CLASSES, includedCorpusAmount, type RetirementInput,
+} from "@/lib/finance/retirement";
 
 const KEY = "finance-planner:retirement:v1";
 
@@ -22,6 +24,37 @@ describe("retirement plan store", () => {
     savePlan(plan);
     expect(loadPlan()?.retirementAge).toBe(55);
     expect(loadPlan()?.assetClasses).toEqual(DEFAULT_ASSET_CLASSES);
+  });
+
+  // The end-to-end version of the open-key change: a plan written by a build
+  // that knows about NPS, loaded by one that doesn't. The balance used to
+  // vanish here — savePlan wrote it, loadPlan sanitized it away, and the user
+  // saw a smaller corpus with no error explaining why.
+  it("keeps an asset class this build does not know about", () => {
+    const withNps: RetirementInput = {
+      ...plan,
+      assetClasses: [
+        ...DEFAULT_ASSET_CLASSES,
+        { key: "nps", label: "NPS", amount: 450_000, ratePct: 10, includeInRetirement: true },
+      ],
+    };
+    savePlan(withNps);
+
+    const nps = loadPlan()!.assetClasses.find((a) => a.key === "nps");
+    expect(nps).toMatchObject({ label: "NPS", amount: 450_000, ratePct: 10 });
+  });
+
+  it("counts an unknown asset class toward the corpus after a round trip", () => {
+    const withNps: RetirementInput = {
+      ...plan,
+      assetClasses: [
+        ...DEFAULT_ASSET_CLASSES,
+        { key: "nps", label: "NPS", amount: 450_000, ratePct: 10, includeInRetirement: true },
+      ],
+    };
+    savePlan(withNps);
+
+    expect(includedCorpusAmount(loadPlan()!.assetClasses)).toBe(450_000);
   });
 
   it("migrates an old-shape saved plan (currentCorpus, no assetClasses) into the new asset-class shape", () => {
